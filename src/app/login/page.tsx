@@ -3,12 +3,12 @@
 import { createClient } from "@/utils/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
-export default function LoginPage() {
+function LoginContent() {
     const supabase = createClient()
     const searchParams = useSearchParams()
     const router = useRouter()
@@ -179,5 +179,17 @@ export default function LoginPage() {
                 </div>
             </div>
         </div>
+    )
+}
+
+export default function LoginPage() {
+    return (
+        <Suspense fallback={
+            <div className="flex items-center justify-center min-h-screen bg-background">
+                <div className="animate-pulse">Loading...</div>
+            </div>
+        }>
+            <LoginContent />
+        </Suspense>
     )
 }
