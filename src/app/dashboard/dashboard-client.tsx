@@ -5,7 +5,7 @@ import { LeftSidebar } from "@/components/dashboard/left-sidebar"
 import { CenterPane } from "@/components/dashboard/center-pane"
 import { RightSidebar } from "@/components/dashboard/right-sidebar"
 import { Database } from "@/types/database"
-import { createClient } from "@/utils/supabase/client"
+import { useMindMapSync } from "@/hooks/useMindMapSync"
 
 type Goal = Database['public']['Tables']['goals']['Row']
 type Project = Database['public']['Tables']['projects']['Row']
@@ -17,22 +17,20 @@ interface DashboardClientProps {
     initialProjects: Project[]
     initialGroups: TaskGroup[]
     initialTasks: Task[]
+    userId: string
 }
 
 export function DashboardClient({
     initialGoals,
     initialProjects,
     initialGroups,
-    initialTasks
+    initialTasks,
+    userId
 }: DashboardClientProps) {
-    const supabase = createClient()
-
     // State
     const [goals] = useState<Goal[]>(initialGoals)
     const [projects] = useState<Project[]>(initialProjects)
-
-    // Editable State
-    const [groups, setGroups] = useState<TaskGroup[]>(initialGroups)
+    const [tasks, setTasks] = useState<Task[]>(initialTasks)
 
     // Selection State
     const [selectedGoalId, setSelectedGoalId] = useState<string | null>(
@@ -59,35 +57,40 @@ export function DashboardClient({
 
     const selectedProject = projects.find(p => p.id === selectedProjectId)
 
-    // Get Groups and Tasks for selected project
-    const currentGroups = groups
-        .filter(g => g.project_id === selectedProjectId)
-        .sort((a, b) => a.order_index - b.order_index)
+    // --- MindMap Sync Hook ---
+    // Get groups for the selected project with Realtime sync
+    const projectGroupsInitial = initialGroups.filter(g => g.project_id === selectedProjectId)
 
-    const currentTasks = initialTasks.filter(t =>
+    const {
+        groups: currentGroups,
+        createGroup,
+        updateGroupTitle,
+        deleteGroup,
+        isLoading
+    } = useMindMapSync({
+        projectId: selectedProjectId,
+        userId,
+        initialGroups: projectGroupsInitial
+    })
+
+    // Get tasks for current groups
+    const currentTasks = tasks.filter(t =>
         currentGroups.some(g => g.id === t.group_id)
     )
 
     // --- Handlers ---
+    const handleCreateGroup = async (title: string) => {
+        await createGroup(title)
+    }
+
     const handleUpdateGroupTitle = async (groupId: string, newTitle: string) => {
-        // 1. Optimistic Update
-        setGroups(prev => prev.map(g =>
-            g.id === groupId ? { ...g, title: newTitle } : g
-        ))
+        await updateGroupTitle(groupId, newTitle)
+    }
 
-        // 2. DB Update
-        try {
-            const { error } = await supabase
-                .from('task_groups')
-                .update({ title: newTitle })
-                .eq('id', groupId)
-
-            if (error) throw error
-        } catch (error) {
-            console.error("Failed to update group title:", error)
-            // Revert on error? For now, we'll just log. User might refresh later.
-            alert("Failed to save changes. Please check connection.")
-        }
+    const handleDeleteGroup = async (groupId: string) => {
+        await deleteGroup(groupId)
+        // Also remove tasks that belonged to this group from local state
+        setTasks(prev => prev.filter(t => t.group_id !== groupId))
     }
 
     return (
@@ -111,6 +114,8 @@ export function DashboardClient({
                     groups={currentGroups}
                     tasks={currentTasks}
                     onUpdateGroupTitle={handleUpdateGroupTitle}
+                    onCreateGroup={handleCreateGroup}
+                    onDeleteGroup={handleDeleteGroup}
                 />
             </div>
 

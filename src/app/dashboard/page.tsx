@@ -1,8 +1,16 @@
 import { createClient } from "@/utils/supabase/server"
 import { DashboardClient } from "./dashboard-client"
+import { redirect } from "next/navigation"
 
 export default async function DashboardPage() {
     const supabase = await createClient()
+
+    // Get current user
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) {
+        redirect('/login')
+    }
 
     // Fetch ALL data (Hierarchical)
     // 1. Goals
@@ -35,6 +43,8 @@ export default async function DashboardPage() {
             initialProjects={projects || []}
             initialGroups={groups || []}
             initialTasks={tasks || []}
+            userId={user.id}
         />
     )
 }
+

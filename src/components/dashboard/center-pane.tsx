@@ -16,9 +16,18 @@ interface CenterPaneProps {
     groups: TaskGroup[]
     tasks: Task[]
     onUpdateGroupTitle?: (groupId: string, newTitle: string) => void
+    onCreateGroup?: (title: string) => void
+    onDeleteGroup?: (groupId: string) => void
 }
 
-export function CenterPane({ project, groups, tasks, onUpdateGroupTitle }: CenterPaneProps) {
+export function CenterPane({
+    project,
+    groups,
+    tasks,
+    onUpdateGroupTitle,
+    onCreateGroup,
+    onDeleteGroup
+}: CenterPaneProps) {
 
     const getGroupColor = (index: number) => {
         const colors = ["text-blue-500", "text-purple-500", "text-pink-500", "text-indigo-500"]
@@ -42,11 +51,12 @@ export function CenterPane({ project, groups, tasks, onUpdateGroupTitle }: Cente
         <div className="h-full flex flex-col bg-background">
             {/* Mind Map Area (Top) */}
             <div className="h-1/2 min-h-[300px] border-b bg-muted/5 relative overflow-hidden group flex flex-col">
-
                 <MindMap
                     project={project}
                     groups={groups}
                     onUpdateGroupTitle={onUpdateGroupTitle || (() => { })}
+                    onCreateGroup={onCreateGroup}
+                    onDeleteGroup={onDeleteGroup}
                 />
             </div>
 
