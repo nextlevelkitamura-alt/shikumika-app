@@ -5,6 +5,7 @@ import { LeftSidebar } from "@/components/dashboard/left-sidebar"
 import { CenterPane } from "@/components/dashboard/center-pane"
 import { RightSidebar } from "@/components/dashboard/right-sidebar"
 import { Database } from "@/types/database"
+import { createClient } from "@/utils/supabase/client"
 
 type Goal = Database['public']['Tables']['goals']['Row']
 type Project = Database['public']['Tables']['projects']['Row']
@@ -24,9 +25,14 @@ export function DashboardClient({
     initialGroups,
     initialTasks
 }: DashboardClientProps) {
+    const supabase = createClient()
+
     // State
     const [goals] = useState<Goal[]>(initialGoals)
     const [projects] = useState<Project[]>(initialProjects)
+
+    // Editable State
+    const [groups, setGroups] = useState<TaskGroup[]>(initialGroups)
 
     // Selection State
     const [selectedGoalId, setSelectedGoalId] = useState<string | null>(
@@ -54,13 +60,35 @@ export function DashboardClient({
     const selectedProject = projects.find(p => p.id === selectedProjectId)
 
     // Get Groups and Tasks for selected project
-    const currentGroups = initialGroups
+    const currentGroups = groups
         .filter(g => g.project_id === selectedProjectId)
         .sort((a, b) => a.order_index - b.order_index)
 
     const currentTasks = initialTasks.filter(t =>
         currentGroups.some(g => g.id === t.group_id)
     )
+
+    // --- Handlers ---
+    const handleUpdateGroupTitle = async (groupId: string, newTitle: string) => {
+        // 1. Optimistic Update
+        setGroups(prev => prev.map(g =>
+            g.id === groupId ? { ...g, title: newTitle } : g
+        ))
+
+        // 2. DB Update
+        try {
+            const { error } = await supabase
+                .from('task_groups')
+                .update({ title: newTitle })
+                .eq('id', groupId)
+
+            if (error) throw error
+        } catch (error) {
+            console.error("Failed to update group title:", error)
+            // Revert on error? For now, we'll just log. User might refresh later.
+            alert("Failed to save changes. Please check connection.")
+        }
+    }
 
     return (
         <div className="flex h-full w-full">
@@ -82,6 +110,7 @@ export function DashboardClient({
                     project={selectedProject}
                     groups={currentGroups}
                     tasks={currentTasks}
+                    onUpdateGroupTitle={handleUpdateGroupTitle}
                 />
             </div>
 

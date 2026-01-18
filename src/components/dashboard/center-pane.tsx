@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { MoreHorizontal, Play, CheckCircle2, Circle } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
+import { MindMap } from "./mind-map"
 
 type Project = Database['public']['Tables']['projects']['Row']
 type TaskGroup = Database['public']['Tables']['task_groups']['Row']
@@ -14,9 +15,10 @@ interface CenterPaneProps {
     project?: Project
     groups: TaskGroup[]
     tasks: Task[]
+    onUpdateGroupTitle?: (groupId: string, newTitle: string) => void
 }
 
-export function CenterPane({ project, groups, tasks }: CenterPaneProps) {
+export function CenterPane({ project, groups, tasks, onUpdateGroupTitle }: CenterPaneProps) {
 
     const getGroupColor = (index: number) => {
         const colors = ["text-blue-500", "text-purple-500", "text-pink-500", "text-indigo-500"]
@@ -40,12 +42,11 @@ export function CenterPane({ project, groups, tasks }: CenterPaneProps) {
         <div className="h-full flex flex-col bg-background">
             {/* Mind Map Area (Top) */}
             <div className="h-1/2 min-h-[300px] border-b bg-muted/5 relative overflow-hidden group">
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <div className="text-center space-y-2">
-                        <h2 className="text-2xl font-bold text-foreground/20">{project.title}</h2>
-                        <p className="text-sm text-foreground/20">Mind Map Placeholder</p>
-                    </div>
-                </div>
+                <MindMap
+                    project={project}
+                    groups={groups}
+                    onUpdateGroupTitle={onUpdateGroupTitle || (() => { })}
+                />
             </div>
 
             {/* Task Group List Area (Bottom) */}
