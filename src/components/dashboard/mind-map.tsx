@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import ReactFlow, {
     Node,
     Edge,
@@ -13,31 +13,80 @@ import ReactFlow, {
     NodeProps,
     Connection,
     addEdge,
-    Panel
+    Panel,
+    useReactFlow,
+    ReactFlowProvider
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { Database } from "@/types/database";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Plus, Trash2 } from "lucide-react";
+import dagre from 'dagre';
 
 type TaskGroup = Database['public']['Tables']['task_groups']['Row']
 type Project = Database['public']['Tables']['projects']['Row']
 
+// --- Layout Configuration ---
+const nodeWidth = 200;
+const nodeHeight = 60;
+
+const getLayoutedElements = (nodes: Node[], edges: Edge[]) => {
+    const dagreGraph = new dagre.graphlib.Graph();
+    dagreGraph.setDefaultEdgeLabel(() => ({}));
+
+    dagreGraph.setGraph({ rankdir: 'LR' }); // Left to Right layout
+
+    nodes.forEach((node) => {
+        // Dynamic height based on type
+        const height = node.type === 'projectNode' ? 80 : 60;
+        dagreGraph.setNode(node.id, { width: nodeWidth, height: height });
+    });
+
+    edges.forEach((edge) => {
+        dagreGraph.setEdge(edge.source, edge.target);
+    });
+
+    dagre.layout(dagreGraph);
+
+    nodes.forEach((node) => {
+        const nodeWithPosition = dagreGraph.node(node.id);
+        node.position = {
+            x: nodeWithPosition.x - nodeWidth / 2,
+            y: nodeWithPosition.y - nodeHeight / 2,
+        };
+
+        return node;
+    });
+
+    return { nodes, edges };
+};
+
 // --- Custom Node for Task Groups (Editable) ---
 const GroupNode = ({ data, isConnectable, selected }: NodeProps) => {
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    // Auto-focus if created recently (optimization: strict check can be added)
+    useEffect(() => {
+        if (data.isNew && inputRef.current) {
+            inputRef.current.focus();
+            inputRef.current.select();
+        }
+    }, [data.isNew]);
+
     return (
         <div className="relative group">
-            <Handle type="target" position={Position.Top} isConnectable={isConnectable} className="!bg-muted-foreground w-2 h-2" />
+            <Handle type="target" position={Position.Left} isConnectable={isConnectable} className="!bg-muted-foreground w-2 h-2" />
 
             <div className={`
                 min-w-[160px] px-4 py-3 rounded-xl 
                 bg-card border transition-all duration-300
-                ${data.isNew ? 'border-dashed border-primary bg-primary/5' : 'border-border hover:border-primary/50'}
-                ${selected ? 'ring-2 ring-primary' : ''}
-                shadow-sm hover:shadow-lg hover:-translate-y-0.5
+                ${selected ? 'ring-2 ring-primary border-primary shadow-lg scale-105' : 'border-border hover:border-primary/50'}
+                ${data.isNew ? 'border-dashed border-primary bg-primary/5' : ''}
+                shadow-sm
             `}>
                 <Input
+                    ref={inputRef}
                     defaultValue={data.label}
                     className="
                         h-6 p-0 text-sm font-medium text-center bg-transparent border-none shadow-none 
@@ -50,68 +99,37 @@ const GroupNode = ({ data, isConnectable, selected }: NodeProps) => {
                         }
                     }}
                 />
-
-                {/* Delete button (visible on hover) */}
-                {data.onDelete && (
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            data.onDelete(data.id);
-                        }}
-                        className="absolute -top-2 -right-2 p-1 rounded-full bg-destructive text-destructive-foreground opacity-0 group-hover:opacity-100 transition-opacity shadow-md hover:scale-110"
-                    >
-                        <Trash2 className="w-3 h-3" />
-                    </button>
-                )}
             </div>
 
-            <Handle type="source" position={Position.Bottom} isConnectable={isConnectable} className="!bg-muted-foreground w-2 h-2" />
+            <Handle type="source" position={Position.Right} isConnectable={isConnectable} className="!bg-muted-foreground w-2 h-2" />
         </div>
     );
 };
 
 // --- Custom Node for Project (Center) ---
-const ProjectNode = ({ data, isConnectable }: NodeProps) => {
+const ProjectNode = ({ data, isConnectable, selected }: NodeProps) => {
     return (
         <div className="relative group">
-            <div className="
+            <div className={`
                 min-w-[200px] px-6 py-4 rounded-2xl
                 bg-gradient-to-br from-primary to-primary/80 
                 text-primary-foreground font-bold text-lg 
                 shadow-xl shadow-primary/20 
                 border border-white/10
                 flex items-center justify-center text-center
-                transition-transform hover:scale-105
-            ">
+                transition-all duration-300
+                ${selected ? 'ring-4 ring-primary/30 scale-105' : 'hover:scale-105'}
+            `}>
                 {data.label}
             </div>
-            <Handle type="source" position={Position.Bottom} isConnectable={isConnectable} className="!bg-primary !w-3 !h-3" />
+            <Handle type="source" position={Position.Right} isConnectable={isConnectable} className="!bg-primary !w-3 !h-3" />
         </div>
-    );
-};
-
-// --- Add Node Button ---
-const AddNodeButton = ({ data }: NodeProps) => {
-    return (
-        <button
-            onClick={() => data.onAdd && data.onAdd()}
-            className="
-                w-12 h-12 rounded-full 
-                bg-muted/50 border-2 border-dashed border-muted-foreground/30
-                hover:bg-primary/10 hover:border-primary/50
-                flex items-center justify-center
-                transition-all duration-200 hover:scale-110
-            "
-        >
-            <Plus className="w-5 h-5 text-muted-foreground" />
-        </button>
     );
 };
 
 const nodeTypes = {
     groupNode: GroupNode,
     projectNode: ProjectNode,
-    addButton: AddNodeButton,
 };
 
 interface MindMapProps {
@@ -122,7 +140,7 @@ interface MindMapProps {
     onDeleteGroup?: (groupId: string) => void
 }
 
-export function MindMap({
+function MindMapContent({
     project,
     groups,
     onUpdateGroupTitle,
@@ -131,68 +149,37 @@ export function MindMap({
 }: MindMapProps) {
     const [nodes, setNodes, onNodesChange] = useNodesState([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+    const { getNodes, getEdges } = useReactFlow();
 
-    // Calculate layout
+    // 1. Construct Graph & Layout
     useEffect(() => {
         if (!project) return;
 
-        const centerX = 400;
-        const centerY = 80;
-
-        // 1. Project Node
+        // Nodes
         const projectNode: Node = {
             id: 'project-root',
             type: 'projectNode',
             data: { label: project.title },
-            position: { x: centerX - 100, y: centerY },
-            draggable: false,
+            position: { x: 0, y: 0 },
         };
 
-        // 2. Group Nodes
-        const rowY = centerY + 150;
-        const spacingX = 200;
-        const totalWidth = groups.length * spacingX;
-        const startX = centerX - (totalWidth / 2);
-
-        const groupNodes: Node[] = groups.map((group, index) => ({
+        const groupNodes: Node[] = groups.map((group) => ({
             id: group.id,
             type: 'groupNode',
             data: {
                 label: group.title,
                 id: group.id,
+                isNew: group.title === 'New Group', // Auto-focus if title is default
                 onLabelChange: (id: string, newVal: string) => {
                     if (newVal !== group.title) {
                         onUpdateGroupTitle(id, newVal)
                     }
-                },
-                onDelete: onDeleteGroup ? (id: string) => {
-                    if (confirm('このグループを削除しますか？（タスクも一緒に削除されます）')) {
-                        onDeleteGroup(id)
-                    }
-                } : undefined
-            },
-            position: { x: startX + (index * spacingX), y: rowY },
-        }));
-
-        // 3. Add Button Node (at the end of groups row)
-        const addButtonNode: Node = {
-            id: 'add-group-button',
-            type: 'addButton',
-            data: {
-                onAdd: () => {
-                    if (onCreateGroup) {
-                        const title = prompt('新しいグループ名を入力してください:');
-                        if (title && title.trim()) {
-                            onCreateGroup(title.trim());
-                        }
-                    }
                 }
             },
-            position: { x: startX + (groups.length * spacingX), y: rowY + 6 },
-            draggable: false,
-        };
+            position: { x: 0, y: 0 },
+        }));
 
-        // 4. Edges
+        // Edges
         const groupEdges: Edge[] = groups.map((group) => ({
             id: `e-root-${group.id}`,
             source: 'project-root',
@@ -202,10 +189,15 @@ export function MindMap({
             style: { stroke: 'hsl(var(--primary))', strokeWidth: 2 },
         }));
 
-        setNodes([projectNode, ...groupNodes, addButtonNode]);
-        setEdges(groupEdges);
+        const rawNodes = [projectNode, ...groupNodes];
+        const rawEdges = groupEdges;
 
-    }, [project, groups, onUpdateGroupTitle, onCreateGroup, onDeleteGroup, setNodes, setEdges]);
+        const layouted = getLayoutedElements(rawNodes, rawEdges);
+
+        setNodes(layouted.nodes);
+        setEdges(layouted.edges);
+
+    }, [project, groups, onUpdateGroupTitle, setNodes, setEdges]);
 
     const onConnect = useCallback((params: Connection) => {
         setEdges((eds) => addEdge({
