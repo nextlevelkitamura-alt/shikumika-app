@@ -184,9 +184,14 @@ function MindMapContent({
             id: `e-root-${group.id}`,
             source: 'project-root',
             target: group.id,
-            type: 'smoothstep',
-            animated: true,
-            style: { stroke: 'hsl(var(--primary))', strokeWidth: 2 },
+            type: 'smoothstep', // XMind style: structured
+            animated: false,   // Cleaner look
+            style: {
+                stroke: 'hsl(var(--muted-foreground))',
+                strokeWidth: 2,
+                opacity: 0.5
+            },
+            pathOptions: { borderRadius: 20 } // Rounded corners
         }));
 
         const rawNodes = [projectNode, ...groupNodes];
@@ -199,12 +204,56 @@ function MindMapContent({
 
     }, [project, groups, onUpdateGroupTitle, setNodes, setEdges]);
 
+
+    // 2. Keyboard Shortcuts
+    useEffect(() => {
+        const handleKeyDown = (event: KeyboardEvent) => {
+            // Ignore if editing text (Input focused)
+            if ((event.target as HTMLElement).tagName === 'INPUT') return;
+
+            // Get selected nodes
+            const selectedNodes = getNodes().filter((n) => n.selected);
+            if (selectedNodes.length === 0) return;
+
+            const selectedNode = selectedNodes[0]; // Handle primary selection based on single selection for now
+
+            // Enter: New Sibling (for Groups)
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                if (selectedNode.type === 'groupNode' && onCreateGroup) {
+                    onCreateGroup("New Group"); // Sibling of group -> implied by just creating a group
+                }
+            }
+
+            // Tab: New Child (for Project)
+            if (event.key === 'Tab') {
+                event.preventDefault();
+                if (selectedNode.type === 'projectNode' && onCreateGroup) {
+                    onCreateGroup("New Group");
+                }
+            }
+
+            // Delete / Backspace: Delete Node
+            if ((event.key === 'Delete' || event.key === 'Backspace') && onDeleteGroup) {
+                if (selectedNode.type === 'groupNode') {
+                    if (confirm('Delete this group?')) {
+                        onDeleteGroup(selectedNode.id);
+                    }
+                }
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [getNodes, onCreateGroup, onDeleteGroup]);
+
+
     const onConnect = useCallback((params: Connection) => {
         setEdges((eds) => addEdge({
             ...params,
             type: 'smoothstep',
-            animated: true,
-            style: { stroke: 'hsl(var(--primary))', strokeWidth: 2 },
+            style: { stroke: 'hsl(var(--muted-foreground))', strokeWidth: 2, opacity: 0.5 },
+            pathOptions: { borderRadius: 20 }
         }, eds))
     }, [setEdges]);
 
@@ -220,31 +269,20 @@ function MindMapContent({
                 fitView
                 fitViewOptions={{ padding: 0.3 }}
                 attributionPosition="bottom-right"
-                deleteKeyCode={null} // Disable delete key (we use custom delete)
+                deleteKeyCode={null} // Handled by custom hook
             >
-                <Background gap={16} size={1} color="hsl(var(--muted-foreground) / 0.1)" />
+                <Background gap={20} size={1} color="hsl(var(--muted-foreground) / 0.1)" />
                 <Controls showInteractive={false} />
-
-                {/* Toolbar Panel */}
-                <Panel position="top-right" className="flex gap-2">
-                    <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                            if (onCreateGroup) {
-                                const title = prompt('新しいグループ名を入力してください:');
-                                if (title && title.trim()) {
-                                    onCreateGroup(title.trim());
-                                }
-                            }
-                        }}
-                        className="gap-1"
-                    >
-                        <Plus className="w-4 h-4" />
-                        グループ追加
-                    </Button>
-                </Panel>
             </ReactFlow>
         </div>
+    );
+}
+
+// Wrap with Provider to use ReactFlow hooks
+export function MindMap(props: MindMapProps) {
+    return (
+        <ReactFlowProvider>
+            <MindMapContent {...props} />
+        </ReactFlowProvider>
     );
 }
