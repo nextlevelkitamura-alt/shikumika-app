@@ -39,13 +39,10 @@ export function CenterPane({ project, groups, tasks, onUpdateGroupTitle }: Cente
     }
 
     return (
-        <div className="h-full flex flex-col bg-red-900/20">
+        <div className="h-full flex flex-col bg-background">
             {/* Mind Map Area (Top) */}
             <div className="h-1/2 min-h-[300px] border-b bg-muted/5 relative overflow-hidden group flex flex-col">
-                <div className="absolute top-2 left-2 z-10 bg-background/80 p-1 text-[10px] text-muted-foreground rounded border">
-                    Mind Map Active v3
-                    {project ? ` - Project: ${project.title}` : ' - No Project'}
-                </div>
+
                 <MindMap
                     project={project}
                     groups={groups}

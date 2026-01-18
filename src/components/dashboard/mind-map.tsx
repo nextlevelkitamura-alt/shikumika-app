@@ -26,12 +26,20 @@ type Project = Database['public']['Tables']['projects']['Row']
 const GroupNode = ({ data, isConnectable }: NodeProps) => {
     return (
         <div className="relative group">
-            <Handle type="target" position={Position.Top} isConnectable={isConnectable} className="!bg-muted-foreground" />
+            <Handle type="target" position={Position.Top} isConnectable={isConnectable} className="!bg-muted-foreground w-2 h-2" />
 
-            <Card className={`min-w-[150px] p-2 border-2 ${data.isNew ? 'border-dashed border-primary' : 'border-primary/50'} bg-card/80 backdrop-blur-sm shadow-sm hover:shadow-md transition-all`}>
+            <div className={`
+                min-w-[160px] px-4 py-3 rounded-xl 
+                bg-card border transition-all duration-300
+                ${data.isNew ? 'border-dashed border-primary bg-primary/5' : 'border-border hover:border-primary/50'}
+                shadow-sm hover:shadow-lg hover:-translate-y-0.5
+            `}>
                 <Input
                     defaultValue={data.label}
-                    className="h-7 text-xs font-semibold bg-transparent border-none shadow-none focus-visible:ring-0 px-1 text-center"
+                    className="
+                        h-6 p-0 text-sm font-medium text-center bg-transparent border-none shadow-none 
+                        focus-visible:ring-0 focus:text-primary placeholder:text-muted-foreground/50
+                    "
                     onBlur={(evt) => data.onLabelChange && data.onLabelChange(data.id, evt.target.value)}
                     onKeyDown={(evt) => {
                         if (evt.key === 'Enter') {
@@ -39,9 +47,9 @@ const GroupNode = ({ data, isConnectable }: NodeProps) => {
                         }
                     }}
                 />
-            </Card>
+            </div>
 
-            <Handle type="source" position={Position.Bottom} isConnectable={isConnectable} className="!bg-muted-foreground" />
+            <Handle type="source" position={Position.Bottom} isConnectable={isConnectable} className="!bg-muted-foreground w-2 h-2" />
         </div>
     );
 };
@@ -49,11 +57,19 @@ const GroupNode = ({ data, isConnectable }: NodeProps) => {
 // --- Custom Node for Project (Center) ---
 const ProjectNode = ({ data, isConnectable }: NodeProps) => {
     return (
-        <div className="relative">
-            <div className="w-[180px] h-[60px] flex items-center justify-center rounded-full bg-primary text-primary-foreground font-bold shadow-lg text-sm px-4 text-center border-4 border-background">
+        <div className="relative group">
+            <div className="
+                min-w-[200px] px-6 py-4 rounded-2xl
+                bg-gradient-to-br from-primary to-primary/80 
+                text-primary-foreground font-bold text-lg 
+                shadow-xl shadow-primary/20 
+                border border-white/10
+                flex items-center justify-center text-center
+                transition-transform hover:scale-105
+            ">
                 {data.label}
             </div>
-            <Handle type="source" position={Position.Bottom} isConnectable={isConnectable} className="!bg-transparent" />
+            <Handle type="source" position={Position.Bottom} isConnectable={isConnectable} className="!bg-primary !w-3 !h-3" />
         </div>
     );
 };
