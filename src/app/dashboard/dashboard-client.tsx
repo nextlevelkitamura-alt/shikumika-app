@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { LeftSidebar } from "@/components/dashboard/left-sidebar"
 import { CenterPane } from "@/components/dashboard/center-pane"
 import { RightSidebar } from "@/components/dashboard/right-sidebar"
@@ -30,7 +30,6 @@ export function DashboardClient({
     // State
     const [goals] = useState<Goal[]>(initialGoals)
     const [projects] = useState<Project[]>(initialProjects)
-    const [tasks, setTasks] = useState<Task[]>(initialTasks)
 
     // Selection State
     const [selectedGoalId, setSelectedGoalId] = useState<string | null>(
@@ -40,10 +39,13 @@ export function DashboardClient({
         initialProjects.length > 0 ? initialProjects[0].id : null
     )
 
-    // Filtered Data
-    const filteredProjects = projects.filter(p => p.goal_id === selectedGoalId)
+    // STABLE reference for filtered projects using useMemo
+    const filteredProjects = useMemo(() =>
+        projects.filter(p => p.goal_id === selectedGoalId),
+        [projects, selectedGoalId]
+    )
 
-    // Auto-select first project when goal changes
+    // Auto-select first project when goal changes (NOTE: deps are primitives only)
     useEffect(() => {
         if (selectedGoalId) {
             const projectsInGoal = projects.filter(p => p.goal_id === selectedGoalId)
@@ -53,17 +55,29 @@ export function DashboardClient({
                 setSelectedProjectId(null)
             }
         }
-    }, [selectedGoalId, projects, selectedProjectId])
+    }, [selectedGoalId]) // ONLY depends on selectedGoalId, not objects
 
-    const selectedProject = projects.find(p => p.id === selectedProjectId)
+    const selectedProject = useMemo(() =>
+        projects.find(p => p.id === selectedProjectId),
+        [projects, selectedProjectId]
+    )
 
     // --- MindMap Sync Hook ---
-    // Get groups for the selected project with Realtime sync
-    const projectGroupsInitial = initialGroups.filter(g => g.project_id === selectedProjectId)
+    // STABLE reference for initial groups using useMemo with string dep
+    const projectGroupsInitial = useMemo(() =>
+        initialGroups.filter(g => g.project_id === selectedProjectId),
+        [initialGroups, selectedProjectId]
+    )
+
+    // STABLE reference for initial tasks - useMemo
+    const projectTasksInitial = useMemo(() => {
+        const groupIds = new Set(projectGroupsInitial.map(g => g.id))
+        return initialTasks.filter(t => groupIds.has(t.group_id))
+    }, [initialTasks, projectGroupsInitial])
 
     const {
         groups: currentGroups,
-        tasks: syncedTasks,
+        tasks: currentTasks,
         createGroup,
         updateGroupTitle,
         deleteGroup,
@@ -76,27 +90,21 @@ export function DashboardClient({
         projectId: selectedProjectId,
         userId,
         initialGroups: projectGroupsInitial,
-        initialTasks: initialTasks
+        initialTasks: projectTasksInitial
     })
 
-    // Get tasks for current groups (syncedTasks already filtered by hook logic mostly, but let's trust hook's filtered list if we implemented it right)
-    // Actually hook returns ALL tasks it tracks. We should double check if we need to filter further.
-    // The hook logic forces filtering by insertion, but let's iterate safely.
-    // Actually the hook filters tasks by `groups` presence. So `syncedTasks` are correct.
-    const currentTasks = syncedTasks
-
-    // --- Handlers ---
-    const handleCreateGroup = async (title: string) => {
+    // STABLE handlers using useCallback
+    const handleCreateGroup = useCallback(async (title: string) => {
         await createGroup(title)
-    }
+    }, [createGroup])
 
-    const handleUpdateGroupTitle = async (groupId: string, newTitle: string) => {
+    const handleUpdateGroupTitle = useCallback(async (groupId: string, newTitle: string) => {
         await updateGroupTitle(groupId, newTitle)
-    }
+    }, [updateGroupTitle])
 
-    const handleDeleteGroup = async (groupId: string) => {
+    const handleDeleteGroup = useCallback(async (groupId: string) => {
         await deleteGroup(groupId)
-    }
+    }, [deleteGroup])
 
     return (
         <div className="flex h-full w-full">
@@ -121,7 +129,6 @@ export function DashboardClient({
                     onUpdateGroupTitle={handleUpdateGroupTitle}
                     onCreateGroup={handleCreateGroup}
                     onDeleteGroup={handleDeleteGroup}
-
                     onCreateTask={createTask}
                     onUpdateTask={updateTask}
                     onDeleteTask={deleteTask}

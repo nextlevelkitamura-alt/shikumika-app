@@ -54,7 +54,7 @@ class MindMapErrorBoundary extends Component<{ children: ReactNode }, { hasError
     }
 }
 
-// --- Custom Nodes (Pure Components) ---
+// --- Custom Nodes (Pure Components, defined OUTSIDE to prevent recreation) ---
 const ProjectNode = React.memo(({ data }: NodeProps) => (
     <div className="w-[180px] px-4 py-3 rounded-xl bg-primary text-primary-foreground font-bold text-center shadow-lg">
         {data?.label ?? 'Project'}
@@ -81,8 +81,9 @@ const TaskNode = React.memo(({ data }: NodeProps) => (
 ));
 TaskNode.displayName = 'TaskNode';
 
-// IMPORTANT: Define nodeTypes outside component to prevent recreation
+// CRITICAL: Define outside component to prevent recreation on every render
 const nodeTypes = { projectNode: ProjectNode, groupNode: GroupNode, taskNode: TaskNode };
+const defaultViewport = { x: 0, y: 0, zoom: 0.8 };
 
 interface MindMapProps {
     project: Project
@@ -98,42 +99,44 @@ interface MindMapProps {
 }
 
 /**
- * MindMapContent: Pure rendering component
- * 
- * ONE-WAY DATA FLOW:
- * - nodes and edges are DERIVED STATE (useMemo) from tasks
- * - NO useState for nodes/edges
- * - NO useEffect that modifies nodes/edges
- * - ReactFlow is READ-ONLY (no onNodesChange, onEdgesChange)
+ * MindMapContent: Pure rendering component with STABLE dependencies
  */
 function MindMapContent({ project, groups, tasks }: MindMapProps) {
-    // DERIVED STATE: Nodes and Edges are computed directly from props
-    // This runs on every render, but only recalculates when deps change
+    // DEEP COMPARISON: Serialize to string for stable dependency
+    // This ensures useMemo only recalculates when actual DATA changes, not references
+    const projectId = project?.id ?? '';
+    const groupsJson = JSON.stringify(groups?.map(g => ({ id: g?.id, title: g?.title })) ?? []);
+    const tasksJson = JSON.stringify(tasks?.map(t => ({ id: t?.id, title: t?.title, status: t?.status, group_id: t?.group_id })) ?? []);
+
+    // DERIVED STATE with STABLE dependencies (string comparison, not reference)
     const { nodes, edges } = useMemo(() => {
         const resultNodes: Node[] = [];
         const resultEdges: Edge[] = [];
 
-        // Safety check
-        if (!project?.id) {
+        if (!projectId) {
             return { nodes: resultNodes, edges: resultEdges };
         }
 
         try {
-            // 1. Project node (root)
+            // Parse back from JSON for actual use
+            const parsedGroups = JSON.parse(groupsJson) as { id: string; title: string }[];
+            const parsedTasks = JSON.parse(tasksJson) as { id: string; title: string; status: string; group_id: string }[];
+
+            // 1. Project node
             resultNodes.push({
                 id: 'project-root',
                 type: 'projectNode',
-                data: { label: project.title ?? 'Project' },
+                data: { label: project?.title ?? 'Project' },
                 position: { x: 50, y: 200 },
             });
 
             // 2. Safe arrays
-            const safeGroups = Array.isArray(groups) ? groups.filter(g => g?.id) : [];
+            const safeGroups = parsedGroups.filter(g => g?.id);
             const groupIdSet = new Set(safeGroups.map(g => g.id));
-            const safeTasks = Array.isArray(tasks) ? tasks.filter(t => t?.id && t?.group_id && groupIdSet.has(t.group_id)) : [];
+            const safeTasks = parsedTasks.filter(t => t?.id && t?.group_id && groupIdSet.has(t.group_id));
 
-            // 3. Group tasks by group_id
-            const tasksByGroup: Record<string, Task[]> = {};
+            // 3. Group tasks
+            const tasksByGroup: Record<string, typeof safeTasks> = {};
             for (const task of safeTasks) {
                 if (!tasksByGroup[task.group_id]) {
                     tasksByGroup[task.group_id] = [];
@@ -141,7 +144,7 @@ function MindMapContent({ project, groups, tasks }: MindMapProps) {
                 tasksByGroup[task.group_id].push(task);
             }
 
-            // 4. Create group nodes and edges
+            // 4. Create nodes and edges
             safeGroups.forEach((group, index) => {
                 resultNodes.push({
                     id: group.id,
@@ -156,16 +159,12 @@ function MindMapContent({ project, groups, tasks }: MindMapProps) {
                     type: 'smoothstep',
                 });
 
-                // 5. Create task nodes and edges for this group
                 const groupTasks = tasksByGroup[group.id] ?? [];
                 groupTasks.forEach((task, taskIndex) => {
                     resultNodes.push({
                         id: task.id,
                         type: 'taskNode',
-                        data: {
-                            label: task.title ?? 'Task',
-                            status: task.status ?? 'todo'
-                        },
+                        data: { label: task.title ?? 'Task', status: task.status ?? 'todo' },
                         position: { x: 520, y: 30 + index * 100 + taskIndex * 50 },
                     });
                     resultEdges.push({
@@ -181,7 +180,7 @@ function MindMapContent({ project, groups, tasks }: MindMapProps) {
         }
 
         return { nodes: resultNodes, edges: resultEdges };
-    }, [project, groups, tasks]); // ONLY depends on source data, NOT on nodes/edges
+    }, [projectId, groupsJson, tasksJson, project?.title]); // STRING dependencies, not object references
 
     return (
         <div className="w-full h-full bg-muted/5">
@@ -189,6 +188,7 @@ function MindMapContent({ project, groups, tasks }: MindMapProps) {
                 nodes={nodes}
                 edges={edges}
                 nodeTypes={nodeTypes}
+                defaultViewport={defaultViewport}
                 fitView
                 fitViewOptions={{ padding: 0.2 }}
                 deleteKeyCode={null}
@@ -198,8 +198,6 @@ function MindMapContent({ project, groups, tasks }: MindMapProps) {
                 zoomOnScroll={true}
                 minZoom={0.5}
                 maxZoom={1.5}
-            // NO onNodesChange - read-only
-            // NO onEdgesChange - read-only
             >
                 <Background gap={20} size={1} color="hsl(var(--muted-foreground) / 0.1)" />
                 <Controls showInteractive={false} />
@@ -216,7 +214,7 @@ export function MindMap(props: MindMapProps) {
 
     useEffect(() => {
         setMounted(true);
-    }, []); // Empty deps - only runs once
+    }, []);
 
     if (!mounted) {
         return (
