@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useState, useRef, useMemo, Component, ErrorInfo, ReactNode } from 'react';
+import React, { useMemo, useState, useEffect, Component, ErrorInfo, ReactNode } from 'react';
 import ReactFlow, {
     Node,
     Edge,
@@ -39,7 +39,7 @@ class MindMapErrorBoundary extends Component<{ children: ReactNode }, { hasError
             return (
                 <div className="w-full h-full bg-muted/5 flex items-center justify-center">
                     <div className="text-center text-muted-foreground">
-                        <p className="text-sm">マインドマップを読み込み中...</p>
+                        <p className="text-sm">マインドマップでエラーが発生しました</p>
                         <button
                             onClick={() => this.setState({ hasError: false })}
                             className="text-xs text-primary underline mt-2"
@@ -54,96 +54,34 @@ class MindMapErrorBoundary extends Component<{ children: ReactNode }, { hasError
     }
 }
 
-// --- Safe Layout Function ---
-function createLayoutNodes(project: Project | null, groups: TaskGroup[], tasks: Task[]): { nodes: Node[], edges: Edge[] } {
-    const nodes: Node[] = [];
-    const edges: Edge[] = [];
-
-    if (!project?.id) return { nodes, edges };
-
-    try {
-        nodes.push({
-            id: 'project-root',
-            type: 'projectNode',
-            data: { label: project.title ?? 'Project' },
-            position: { x: 50, y: 200 },
-        });
-
-        const safeGroups = (groups ?? []).filter(g => g?.id);
-        const groupIds = new Set(safeGroups.map(g => g.id));
-
-        safeGroups.forEach((group, index) => {
-            nodes.push({
-                id: group.id,
-                type: 'groupNode',
-                data: { label: group.title ?? 'Group' },
-                position: { x: 300, y: 50 + index * 100 },
-            });
-            edges.push({
-                id: `e-proj-${group.id}`,
-                source: 'project-root',
-                target: group.id,
-                type: 'smoothstep',
-            });
-        });
-
-        const safeTasks = (tasks ?? []).filter(t => t?.id && t?.group_id && groupIds.has(t.group_id));
-        const tasksByGroup: Record<string, Task[]> = {};
-        safeTasks.forEach(task => {
-            const gid = task.group_id;
-            if (!tasksByGroup[gid]) tasksByGroup[gid] = [];
-            tasksByGroup[gid].push(task);
-        });
-
-        safeGroups.forEach((group, groupIndex) => {
-            const groupTasks = tasksByGroup[group.id] ?? [];
-            groupTasks.forEach((task, taskIndex) => {
-                nodes.push({
-                    id: task.id,
-                    type: 'taskNode',
-                    data: { label: task.title ?? 'Task', status: task.status ?? 'todo' },
-                    position: { x: 520, y: 30 + groupIndex * 100 + taskIndex * 50 },
-                });
-                edges.push({
-                    id: `e-group-${task.id}`,
-                    source: group.id,
-                    target: task.id,
-                    type: 'smoothstep',
-                });
-            });
-        });
-    } catch (err) {
-        console.error('[MindMap] Layout error:', err);
-        return { nodes: [], edges: [] };
-    }
-
-    return { nodes, edges };
-}
-
-// --- Custom Nodes ---
-const ProjectNode = ({ data }: NodeProps) => (
+// --- Custom Nodes (Pure Components) ---
+const ProjectNode = React.memo(({ data }: NodeProps) => (
     <div className="w-[180px] px-4 py-3 rounded-xl bg-primary text-primary-foreground font-bold text-center shadow-lg">
         {data?.label ?? 'Project'}
         <Handle type="source" position={Position.Right} className="!bg-primary-foreground" />
     </div>
-);
+));
+ProjectNode.displayName = 'ProjectNode';
 
-const GroupNode = ({ data }: NodeProps) => (
+const GroupNode = React.memo(({ data }: NodeProps) => (
     <div className="w-[150px] px-3 py-2 rounded-lg bg-card border text-sm font-medium text-center shadow">
         <Handle type="target" position={Position.Left} className="!bg-muted-foreground" />
         {data?.label ?? 'Group'}
         <Handle type="source" position={Position.Right} className="!bg-muted-foreground" />
     </div>
-);
+));
+GroupNode.displayName = 'GroupNode';
 
-const TaskNode = ({ data }: NodeProps) => (
+const TaskNode = React.memo(({ data }: NodeProps) => (
     <div className="w-[130px] px-2 py-1.5 rounded bg-background border text-xs shadow-sm flex items-center gap-1">
         <Handle type="target" position={Position.Left} className="!bg-muted-foreground/50 !w-1 !h-1" />
         <div className={cn("w-1.5 h-1.5 rounded-full", data?.status === 'done' ? "bg-primary" : "bg-muted-foreground/30")} />
         <span className={cn("truncate", data?.status === 'done' && "line-through text-muted-foreground")}>{data?.label ?? 'Task'}</span>
     </div>
-);
+));
+TaskNode.displayName = 'TaskNode';
 
+// IMPORTANT: Define nodeTypes outside component to prevent recreation
 const nodeTypes = { projectNode: ProjectNode, groupNode: GroupNode, taskNode: TaskNode };
 
 interface MindMapProps {
@@ -159,75 +97,91 @@ interface MindMapProps {
     onMoveTask?: (taskId: string, newGroupId: string) => Promise<void>
 }
 
+/**
+ * MindMapContent: Pure rendering component
+ * 
+ * ONE-WAY DATA FLOW:
+ * - nodes and edges are DERIVED STATE (useMemo) from tasks
+ * - NO useState for nodes/edges
+ * - NO useEffect that modifies nodes/edges
+ * - ReactFlow is READ-ONLY (no onNodesChange, onEdgesChange)
+ */
 function MindMapContent({ project, groups, tasks }: MindMapProps) {
-    // Use refs to store nodes/edges to avoid state update loops
-    const [nodes, setNodes] = useState<Node[]>([]);
-    const [edges, setEdges] = useState<Edge[]>([]);
+    // DERIVED STATE: Nodes and Edges are computed directly from props
+    // This runs on every render, but only recalculates when deps change
+    const { nodes, edges } = useMemo(() => {
+        const resultNodes: Node[] = [];
+        const resultEdges: Edge[] = [];
 
-    // Track the last data hash to prevent unnecessary updates
-    const lastDataHashRef = useRef<string>('');
-    const isUpdatingRef = useRef(false);
-
-    // Create a stable hash of the data to detect real changes
-    const dataHash = useMemo(() => {
-        const groupIds = (groups ?? []).map(g => g?.id).filter(Boolean).sort().join(',');
-        const taskInfo = (tasks ?? []).map(t => `${t?.id}:${t?.status}`).filter(Boolean).sort().join(',');
-        return `${project?.id}|${groupIds}|${taskInfo}`;
-    }, [project?.id, groups, tasks]);
-
-    useEffect(() => {
-        // Guard: Skip if data hasn't actually changed
-        if (dataHash === lastDataHashRef.current) {
-            return;
+        // Safety check
+        if (!project?.id) {
+            return { nodes: resultNodes, edges: resultEdges };
         }
-
-        // Guard: Skip if already updating
-        if (isUpdatingRef.current) {
-            return;
-        }
-
-        // Mark as updating
-        isUpdatingRef.current = true;
-        lastDataHashRef.current = dataHash;
 
         try {
-            if (!project?.id) {
-                setNodes([]);
-                setEdges([]);
-                isUpdatingRef.current = false;
-                return;
+            // 1. Project node (root)
+            resultNodes.push({
+                id: 'project-root',
+                type: 'projectNode',
+                data: { label: project.title ?? 'Project' },
+                position: { x: 50, y: 200 },
+            });
+
+            // 2. Safe arrays
+            const safeGroups = Array.isArray(groups) ? groups.filter(g => g?.id) : [];
+            const groupIdSet = new Set(safeGroups.map(g => g.id));
+            const safeTasks = Array.isArray(tasks) ? tasks.filter(t => t?.id && t?.group_id && groupIdSet.has(t.group_id)) : [];
+
+            // 3. Group tasks by group_id
+            const tasksByGroup: Record<string, Task[]> = {};
+            for (const task of safeTasks) {
+                if (!tasksByGroup[task.group_id]) {
+                    tasksByGroup[task.group_id] = [];
+                }
+                tasksByGroup[task.group_id].push(task);
             }
 
-            const safeGroups = Array.isArray(groups) ? groups : [];
-            const safeTasks = Array.isArray(tasks) ? tasks : [];
+            // 4. Create group nodes and edges
+            safeGroups.forEach((group, index) => {
+                resultNodes.push({
+                    id: group.id,
+                    type: 'groupNode',
+                    data: { label: group.title ?? 'Group' },
+                    position: { x: 300, y: 50 + index * 100 },
+                });
+                resultEdges.push({
+                    id: `e-proj-${group.id}`,
+                    source: 'project-root',
+                    target: group.id,
+                    type: 'smoothstep',
+                });
 
-            const { nodes: newNodes, edges: newEdges } = createLayoutNodes(project, safeGroups, safeTasks);
-
-            // Only update if actually different (belt-and-suspenders)
-            setNodes(prev => {
-                const prevIds = prev.map(n => n.id).join(',');
-                const newIds = newNodes.map(n => n.id).join(',');
-                if (prevIds === newIds) return prev;
-                return newNodes;
-            });
-
-            setEdges(prev => {
-                const prevIds = prev.map(e => e.id).join(',');
-                const newIds = newEdges.map(e => e.id).join(',');
-                if (prevIds === newIds) return prev;
-                return newEdges;
+                // 5. Create task nodes and edges for this group
+                const groupTasks = tasksByGroup[group.id] ?? [];
+                groupTasks.forEach((task, taskIndex) => {
+                    resultNodes.push({
+                        id: task.id,
+                        type: 'taskNode',
+                        data: {
+                            label: task.title ?? 'Task',
+                            status: task.status ?? 'todo'
+                        },
+                        position: { x: 520, y: 30 + index * 100 + taskIndex * 50 },
+                    });
+                    resultEdges.push({
+                        id: `e-group-${task.id}`,
+                        source: group.id,
+                        target: task.id,
+                        type: 'smoothstep',
+                    });
+                });
             });
         } catch (err) {
-            console.error('[MindMap] Layout error:', err);
-            setNodes([]);
-            setEdges([]);
-        } finally {
-            // Reset update flag after a small delay to prevent rapid re-entry
-            setTimeout(() => {
-                isUpdatingRef.current = false;
-            }, 50);
+            console.error('[MindMap] Error creating nodes:', err);
         }
-    }, [dataHash, project, groups, tasks]); // Removed setNodes/setEdges from deps
+
+        return { nodes: resultNodes, edges: resultEdges };
+    }, [project, groups, tasks]); // ONLY depends on source data, NOT on nodes/edges
 
     return (
         <div className="w-full h-full bg-muted/5">
@@ -244,7 +198,8 @@ function MindMapContent({ project, groups, tasks }: MindMapProps) {
                 zoomOnScroll={true}
                 minZoom={0.5}
                 maxZoom={1.5}
-            // REMOVED: onNodesChange and onEdgesChange to prevent circular updates
+            // NO onNodesChange - read-only
+            // NO onEdgesChange - read-only
             >
                 <Background gap={20} size={1} color="hsl(var(--muted-foreground) / 0.1)" />
                 <Controls showInteractive={false} />
@@ -253,15 +208,22 @@ function MindMapContent({ project, groups, tasks }: MindMapProps) {
     );
 }
 
+/**
+ * MindMap: Wrapper with hydration safety
+ */
 export function MindMap(props: MindMapProps) {
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => {
         setMounted(true);
-    }, []);
+    }, []); // Empty deps - only runs once
 
     if (!mounted) {
-        return <div className="w-full h-full bg-muted/5 flex items-center justify-center text-muted-foreground">Loading...</div>;
+        return (
+            <div className="w-full h-full bg-muted/5 flex items-center justify-center text-muted-foreground">
+                Loading...
+            </div>
+        );
     }
 
     return (
