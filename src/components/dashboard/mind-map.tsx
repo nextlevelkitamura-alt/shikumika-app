@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useCallback, useEffect, useRef, useState, Component, ErrorInfo, ReactNode } from 'react';
+import React, { useEffect, useState } from 'react';
 import ReactFlow, {
     Node,
     Edge,
@@ -11,55 +11,17 @@ import ReactFlow, {
     Handle,
     Position,
     NodeProps,
-    useReactFlow,
     ReactFlowProvider,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { Database } from "@/types/database";
-import { Input } from "@/components/ui/input";
-import dagre from 'dagre';
 import { cn } from "@/lib/utils";
 
 type TaskGroup = Database['public']['Tables']['task_groups']['Row']
 type Project = Database['public']['Tables']['projects']['Row']
 type Task = Database['public']['Tables']['tasks']['Row']
 
-// --- Error Boundary ---
-class MindMapErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
-    constructor(props: { children: ReactNode }) {
-        super(props);
-        this.state = { hasError: false };
-    }
-
-    static getDerivedStateFromError(): { hasError: boolean } {
-        return { hasError: true };
-    }
-
-    componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-        console.error('[MindMap ErrorBoundary]', error, errorInfo);
-    }
-
-    render() {
-        if (this.state.hasError) {
-            return (
-                <div className="w-full h-full flex items-center justify-center bg-muted/20 p-4">
-                    <div className="text-center">
-                        <p className="text-muted-foreground">マインドマップを読み込み中...</p>
-                        <button
-                            onClick={() => window.location.reload()}
-                            className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm"
-                        >
-                            リロード
-                        </button>
-                    </div>
-                </div>
-            );
-        }
-        return this.props.children;
-    }
-}
-
-// --- Simple Layout (no dagre to avoid crashes) ---
+// --- Simple Layout ---
 const layoutNodes = (project: Project, groups: TaskGroup[], tasks: Task[]): { nodes: Node[], edges: Edge[] } => {
     const nodes: Node[] = [];
     const edges: Edge[] = [];
@@ -116,7 +78,7 @@ const layoutNodes = (project: Project, groups: TaskGroup[], tasks: Task[]): { no
     return { nodes, edges };
 };
 
-// --- Custom Nodes ---
+// --- Custom Nodes (Read-only display) ---
 const ProjectNode = ({ data, selected }: NodeProps) => (
     <div className={cn(
         "w-[180px] px-4 py-3 rounded-xl bg-primary text-primary-foreground font-bold text-center shadow-lg",
@@ -168,17 +130,11 @@ function MindMapContent({
     project,
     groups,
     tasks,
-    onCreateGroup,
-    onDeleteGroup,
-    onCreateTask,
-    onDeleteTask,
 }: MindMapProps) {
     const [nodes, setNodes, onNodesChange] = useNodesState([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-    const { getNodes } = useReactFlow();
-    const processingRef = useRef(false);
 
-    // Layout effect - wrapped in try-catch
+    // Layout effect
     useEffect(() => {
         if (!project) return;
         try {
@@ -190,66 +146,8 @@ function MindMapContent({
         }
     }, [project, groups, tasks, setNodes, setEdges]);
 
-    // Keyboard handler - completely synchronous with all errors caught
-    useEffect(() => {
-        const handler = (e: KeyboardEvent) => {
-            try {
-                if ((e.target as HTMLElement).tagName === 'INPUT') return;
-                if (processingRef.current) return;
-
-                const selected = getNodes().find(n => n.selected);
-                if (!selected) return;
-
-                if (e.key === 'Tab') {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    processingRef.current = true;
-
-                    if (selected.type === 'projectNode' && onCreateGroup) {
-                        onCreateGroup("New Group");
-                    } else if (selected.type === 'groupNode' && onCreateTask) {
-                        onCreateTask(selected.id, "New Task").catch(console.error);
-                    }
-
-                    setTimeout(() => { processingRef.current = false; }, 500);
-                }
-
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    processingRef.current = true;
-
-                    if (selected.type === 'groupNode' && onCreateGroup) {
-                        onCreateGroup("New Group");
-                    } else if (selected.type === 'taskNode' && onCreateTask && selected.data?.groupId) {
-                        onCreateTask(selected.data.groupId, "New Task").catch(console.error);
-                    }
-
-                    setTimeout(() => { processingRef.current = false; }, 500);
-                }
-
-                if (e.key === 'Delete' || e.key === 'Backspace') {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    processingRef.current = true;
-
-                    if (selected.type === 'groupNode' && onDeleteGroup) {
-                        onDeleteGroup(selected.id);
-                    } else if (selected.type === 'taskNode' && onDeleteTask) {
-                        onDeleteTask(selected.id).catch(console.error);
-                    }
-
-                    setTimeout(() => { processingRef.current = false; }, 500);
-                }
-            } catch (err) {
-                console.error('[MindMap] Keyboard handler error:', err);
-                processingRef.current = false;
-            }
-        };
-
-        window.addEventListener('keydown', handler);
-        return () => window.removeEventListener('keydown', handler);
-    }, [getNodes, onCreateGroup, onDeleteGroup, onCreateTask, onDeleteTask]);
+    // NO KEYBOARD HANDLERS - Keyboard-based node creation removed to prevent crashes
+    // Node creation should be done via UI buttons in the task list below
 
     return (
         <div className="w-full h-full bg-muted/5">
@@ -263,6 +161,9 @@ function MindMapContent({
                 fitViewOptions={{ padding: 0.2 }}
                 deleteKeyCode={null}
                 nodesConnectable={false}
+                nodesDraggable={false}
+                panOnScroll={true}
+                zoomOnScroll={true}
             >
                 <Background gap={20} size={1} color="hsl(var(--muted-foreground) / 0.1)" />
                 <Controls showInteractive={false} />
@@ -272,22 +173,16 @@ function MindMapContent({
 }
 
 export function MindMap(props: MindMapProps) {
-    // Additional safety wrapper
     const [mounted, setMounted] = useState(false);
-
-    useEffect(() => {
-        setMounted(true);
-    }, []);
+    useEffect(() => { setMounted(true); }, []);
 
     if (!mounted) {
         return <div className="w-full h-full bg-muted/5 flex items-center justify-center text-muted-foreground">Loading...</div>;
     }
 
     return (
-        <MindMapErrorBoundary>
-            <ReactFlowProvider>
-                <MindMapContent {...props} />
-            </ReactFlowProvider>
-        </MindMapErrorBoundary>
+        <ReactFlowProvider>
+            <MindMapContent {...props} />
+        </ReactFlowProvider>
     );
 }
