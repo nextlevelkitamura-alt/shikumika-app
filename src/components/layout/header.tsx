@@ -34,6 +34,8 @@ export function Header() {
         router.push("/login")
     }
 
+    const [activeTab, setActiveTab] = useState("dashboard")
+
     return (
         <header className="h-14 border-b flex items-center justify-between px-4 bg-background z-50">
             {/* Left: Logo & Space Switcher */}
@@ -65,8 +67,40 @@ export function Header() {
                 </DropdownMenu>
             </div>
 
-            {/* Right: User Profile */}
+            {/* Center: Navigation (Moved from MiniSidebar) */}
+            <div className="hidden md:flex items-center gap-1 absolute left-1/2 -translate-x-1/2">
+                <Button
+                    variant={activeTab === 'dashboard' ? 'secondary' : 'ghost'}
+                    size="sm"
+                    className="gap-2"
+                    onClick={() => setActiveTab('dashboard')}
+                >
+                    Dashboard
+                </Button>
+                <Button
+                    variant={activeTab === 'goals' ? 'secondary' : 'ghost'}
+                    size="sm"
+                    className="gap-2 text-muted-foreground hover:text-foreground"
+                    onClick={() => setActiveTab('goals')}
+                >
+                    Goals
+                </Button>
+                <Button
+                    variant={activeTab === 'documents' ? 'secondary' : 'ghost'}
+                    size="sm"
+                    className="gap-2 text-muted-foreground hover:text-foreground"
+                    onClick={() => setActiveTab('documents')}
+                >
+                    Documents
+                </Button>
+            </div>
+
+            {/* Right: User Profile & Settings */}
             <div className="flex items-center gap-2">
+                <Button variant="ghost" size="icon" className="text-muted-foreground" title="Settings">
+                    <Settings className="h-4 w-4" />
+                </Button>
+
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <Button variant="ghost" className="relative h-8 w-8 rounded-full">
