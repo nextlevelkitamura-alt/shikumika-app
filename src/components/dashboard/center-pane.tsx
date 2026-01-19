@@ -1,15 +1,13 @@
 "use client"
 
 import { useState, useRef, useEffect, useCallback } from "react"
-import { Separator } from "@/components/ui/separator"
 import { Database } from "@/types/database"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
-import { MoreHorizontal, Play, Check, ChevronRight, ChevronDown, GripHorizontal } from "lucide-react"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { MoreHorizontal, Play, Check, ChevronRight, ChevronDown, Plus, Trash2 } from "lucide-react"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import { MindMap } from "./mind-map"
-
 
 type Project = Database['public']['Tables']['projects']['Row']
 type TaskGroup = Database['public']['Tables']['task_groups']['Row']
@@ -22,22 +20,177 @@ interface CenterPaneProps {
     onUpdateGroupTitle?: (groupId: string, newTitle: string) => void
     onCreateGroup?: (title: string) => void
     onDeleteGroup?: (groupId: string) => void
-
-    onCreateTask?: (groupId: string, title?: string) => Promise<Task | null>
+    onCreateTask?: (groupId: string, title?: string, parentTaskId?: string | null) => Promise<Task | null>
     onUpdateTask?: (taskId: string, updates: Partial<Task>) => Promise<void>
     onDeleteTask?: (taskId: string) => Promise<void>
     onMoveTask?: (taskId: string, newGroupId: string) => Promise<void>
 }
 
-// Custom Progress Bar Component
+// Progress Bar Component
 function MiniProgress({ value, total }: { value: number, total: number }) {
     const percentage = total === 0 ? 0 : Math.round((value / total) * 100)
     return (
-        <div className="flex items-center gap-2 min-w-[100px]">
+        <div className="flex items-center gap-2 min-w-[80px]">
             <div className="h-1.5 flex-1 bg-muted rounded-full overflow-hidden">
                 <div className="h-full bg-primary/70 rounded-full transition-all duration-500" style={{ width: `${percentage}%` }} />
             </div>
-            <span className="text-[10px] text-muted-foreground whitespace-nowrap">{value}/{total} 完了</span>
+            <span className="text-[10px] text-muted-foreground whitespace-nowrap">{value}/{total}</span>
+        </div>
+    )
+}
+
+// Task Item Component (Recursive for parent-child)
+function TaskItem({
+    task,
+    allTasks,
+    isChild = false,
+    onUpdateTask,
+    onDeleteTask,
+    onCreateTask,
+    groupId
+}: {
+    task: Task
+    allTasks: Task[]
+    isChild?: boolean
+    onUpdateTask?: (taskId: string, updates: Partial<Task>) => Promise<void>
+    onDeleteTask?: (taskId: string) => Promise<void>
+    onCreateTask?: (groupId: string, title?: string, parentTaskId?: string | null) => Promise<Task | null>
+    groupId: string
+}) {
+    const [isExpanded, setIsExpanded] = useState(true)
+
+    // Get child tasks
+    const childTasks = allTasks.filter(t => t.parent_task_id === task.id).sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0))
+    const hasChildren = childTasks.length > 0
+
+    // Calculate progress for parent tasks
+    const completedChildren = childTasks.filter(t => t.status === 'done').length
+
+    const handleAddChildTask = async () => {
+        if (onCreateTask) {
+            await onCreateTask(groupId, "New Subtask", task.id)
+        }
+    }
+
+    return (
+        <div className="w-full">
+            <div className={cn(
+                "group flex items-center gap-2 p-2 hover:bg-muted/10 transition-colors",
+                isChild ? "pl-10" : "pl-4"
+            )}>
+                {/* Expand/Collapse for parent tasks */}
+                {hasChildren ? (
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-5 w-5 shrink-0 text-muted-foreground"
+                        onClick={() => setIsExpanded(!isExpanded)}
+                    >
+                        {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                    </Button>
+                ) : (
+                    <div className="w-5" />
+                )}
+
+                {/* Checkbox */}
+                <button
+                    className={cn(
+                        "w-5 h-5 rounded border flex items-center justify-center transition-colors shrink-0",
+                        task.status === 'done' ? "bg-primary border-primary text-primary-foreground" : "border-muted-foreground/30 hover:border-primary"
+                    )}
+                    onClick={() => onUpdateTask?.(task.id, { status: task.status === 'done' ? 'todo' : 'done' })}
+                >
+                    {task.status === 'done' && <Check className="w-3.5 h-3.5" />}
+                </button>
+
+                {/* Title */}
+                <input
+                    className={cn(
+                        "flex-1 bg-transparent border-none text-sm focus:outline-none focus:ring-0 px-1 min-w-0",
+                        task.status === 'done' && "text-muted-foreground line-through"
+                    )}
+                    defaultValue={task.title}
+                    onBlur={(e) => {
+                        if (e.target.value !== task.title) {
+                            onUpdateTask?.(task.id, { title: e.target.value })
+                        }
+                    }}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                            e.currentTarget.blur()
+                        }
+                    }}
+                />
+
+                {/* Progress Bar for parent tasks with children */}
+                {hasChildren && (
+                    <MiniProgress value={completedChildren} total={childTasks.length} />
+                )}
+
+                {/* Actions (Hover) */}
+                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {!isChild && (
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-muted-foreground hover:text-primary"
+                            onClick={handleAddChildTask}
+                            title="サブタスク追加"
+                        >
+                            <Plus className="w-3 h-3" />
+                        </Button>
+                    )}
+
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-6 text-[10px] gap-1 hover:bg-primary hover:text-primary-foreground"
+                    >
+                        <Play className="w-2.5 h-2.5" />
+                        フォーカス
+                    </Button>
+
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground">
+                                <MoreHorizontal className="w-3 h-3" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={handleAddChildTask}>
+                                <Plus className="w-3 h-3 mr-2" />
+                                サブタスク追加
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                                className="text-destructive focus:text-destructive"
+                                onClick={() => onDeleteTask?.(task.id)}
+                            >
+                                <Trash2 className="w-3 h-3 mr-2" />
+                                削除
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </div>
+            </div>
+
+            {/* Child Tasks */}
+            {hasChildren && isExpanded && (
+                <div className="border-l ml-6 border-muted">
+                    {childTasks.map(child => (
+                        <TaskItem
+                            key={child.id}
+                            task={child}
+                            allTasks={allTasks}
+                            isChild={true}
+                            onUpdateTask={onUpdateTask}
+                            onDeleteTask={onDeleteTask}
+                            onCreateTask={onCreateTask}
+                            groupId={groupId}
+                        />
+                    ))}
+                </div>
+            )}
         </div>
     )
 }
@@ -55,7 +208,7 @@ export function CenterPane({
     onMoveTask
 }: CenterPaneProps) {
     // Splitter State
-    const [topHeight, setTopHeight] = useState(50) // percentage
+    const [topHeight, setTopHeight] = useState(50)
     const containerRef = useRef<HTMLDivElement>(null)
     const isDraggingRef = useRef(false)
 
@@ -66,9 +219,8 @@ export function CenterPane({
         setCollapsedGroups(prev => ({ ...prev, [groupId]: !prev[groupId] }))
     }
 
-    // Handlers needed for MindMap (even if read-only for now) or TaskList
     const handleAddTask = async (groupId: string) => {
-        if (onCreateTask) await onCreateTask(groupId, "New Task")
+        if (onCreateTask) await onCreateTask(groupId, "New Task", null)
     }
 
     // Splitter Logic
@@ -81,7 +233,6 @@ export function CenterPane({
         if (!isDraggingRef.current || !containerRef.current) return
         const containerRect = containerRef.current.getBoundingClientRect()
         const newHeight = ((e.clientY - containerRect.top) / containerRect.height) * 100
-        // Constrain between 20% and 80%
         if (newHeight >= 20 && newHeight <= 80) setTopHeight(newHeight)
     }, [])
 
@@ -97,7 +248,6 @@ export function CenterPane({
             document.removeEventListener('mouseup', handleMouseUp)
         }
     }, [handleMouseMove, handleMouseUp])
-
 
     if (!project) {
         return (
@@ -137,21 +287,24 @@ export function CenterPane({
             <div className="flex-1 min-h-0 bg-background flex flex-col">
                 <div className="px-4 py-2 border-b flex justify-between items-center bg-card">
                     <h2 className="font-semibold text-sm">タスク</h2>
-                    <Button variant="ghost" size="sm" className="h-6 w-6">
-                        <ChevronDown className="h-4 w-4" />
-                    </Button>
                 </div>
 
-                <ScrollArea className="flex-1 p-2">
-                    <div className="space-y-4 pb-20">
+                <ScrollArea className="flex-1">
+                    <div className="space-y-3 p-2 pb-20">
                         {groups.map((group) => {
-                            const groupTasks = tasks.filter(t => t.group_id === group.id).sort((a, b) => a.priority - b.priority)
-                            const completedCount = groupTasks.filter(t => t.status === 'done').length
+                            // Get only parent tasks (no parent_task_id)
+                            const parentTasks = tasks
+                                .filter(t => t.group_id === group.id && !t.parent_task_id)
+                                .sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0))
+
+                            // Get all tasks in this group for progress calculation
+                            const allGroupTasks = tasks.filter(t => t.group_id === group.id)
+                            const completedCount = allGroupTasks.filter(t => t.status === 'done').length
                             const isCollapsed = collapsedGroups[group.id]
 
                             return (
                                 <div key={group.id} className="rounded-lg border bg-card overflow-hidden">
-                                    {/* Group Header (Parent Task style) */}
+                                    {/* Group Header */}
                                     <div
                                         className="flex items-center gap-3 p-3 bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors"
                                         onClick={() => toggleGroup(group.id)}
@@ -164,72 +317,56 @@ export function CenterPane({
                                             <div className="flex items-center justify-between">
                                                 <span className="font-medium text-sm truncate">{group.title}</span>
                                                 <div className="flex items-center gap-4">
-                                                    <MiniProgress value={completedCount} total={groupTasks.length} />
-                                                    <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground">
-                                                        <MoreHorizontal className="h-4 w-4" />
-                                                    </Button>
+                                                    <MiniProgress value={completedCount} total={allGroupTasks.length} />
+                                                    <DropdownMenu>
+                                                        <DropdownMenuTrigger asChild>
+                                                            <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground" onClick={(e) => e.stopPropagation()}>
+                                                                <MoreHorizontal className="h-4 w-4" />
+                                                            </Button>
+                                                        </DropdownMenuTrigger>
+                                                        <DropdownMenuContent align="end">
+                                                            <DropdownMenuItem onClick={() => handleAddTask(group.id)}>
+                                                                <Plus className="w-3 h-3 mr-2" />
+                                                                タスク追加
+                                                            </DropdownMenuItem>
+                                                            <DropdownMenuSeparator />
+                                                            <DropdownMenuItem
+                                                                className="text-destructive focus:text-destructive"
+                                                                onClick={() => onDeleteGroup?.(group.id)}
+                                                            >
+                                                                <Trash2 className="w-3 h-3 mr-2" />
+                                                                グループ削除
+                                                            </DropdownMenuItem>
+                                                        </DropdownMenuContent>
+                                                    </DropdownMenu>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
 
-                                    {/* Tasks (Children) */}
+                                    {/* Tasks */}
                                     {!isCollapsed && (
                                         <div className="border-t divide-y">
-                                            {groupTasks.map((task) => (
-                                                <div key={task.id} className="group flex items-center gap-3 p-2 pl-10 hover:bg-muted/10 transition-colors">
-                                                    {/* Checkbox */}
-                                                    <button
-                                                        className={cn(
-                                                            "w-5 h-5 rounded border flex items-center justify-center transition-colors",
-                                                            task.status === 'done' ? "bg-primary border-primary text-primary-foreground" : "border-muted-foreground/30 hover:border-primary"
-                                                        )}
-                                                        onClick={() => onUpdateTask?.(task.id, { status: task.status === 'done' ? 'todo' : 'done' })}
-                                                    >
-                                                        {task.status === 'done' && <Check className="w-3.5 h-3.5" />}
-                                                    </button>
-
-                                                    {/* Title */}
-                                                    <input
-                                                        className={cn(
-                                                            "flex-1 bg-transparent border-none text-sm focus:outline-none focus:ring-0 px-0",
-                                                            task.status === 'done' && "text-muted-foreground line-through"
-                                                        )}
-                                                        defaultValue={task.title}
-                                                        onBlur={(e) => {
-                                                            if (e.target.value !== task.title) {
-                                                                onUpdateTask?.(task.id, { title: e.target.value })
-                                                            }
-                                                        }}
-                                                        onKeyDown={(e) => {
-                                                            if (e.key === 'Enter') {
-                                                                e.currentTarget.blur()
-                                                                handleAddTask(group.id)
-                                                            }
-                                                        }}
-                                                    />
-
-                                                    {/* Actions */}
-                                                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                        <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5 hover:bg-primary hover:text-primary-foreground">
-                                                            <Play className="w-3 h-3" />
-                                                            フォーカス (タイマー起動)
-                                                        </Button>
-                                                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:bg-destructive/10" onClick={() => onDeleteTask?.(task.id)}>
-                                                            <MoreHorizontal className="w-3 h-3" />
-                                                        </Button>
-                                                    </div>
-                                                </div>
+                                            {parentTasks.map((task) => (
+                                                <TaskItem
+                                                    key={task.id}
+                                                    task={task}
+                                                    allTasks={allGroupTasks}
+                                                    onUpdateTask={onUpdateTask}
+                                                    onDeleteTask={onDeleteTask}
+                                                    onCreateTask={onCreateTask}
+                                                    groupId={group.id}
+                                                />
                                             ))}
 
                                             {/* Add Task Button */}
-                                            <div className="p-2 pl-10">
+                                            <div className="p-2 pl-4">
                                                 <button
-                                                    className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+                                                    className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-2 transition-colors"
                                                     onClick={() => handleAddTask(group.id)}
                                                 >
-                                                    <div className="w-4 h-4 flex items-center justify-center border border-dashed rounded mr-2">+</div>
-                                                    新しいタスクを追加...
+                                                    <Plus className="w-3 h-3" />
+                                                    タスクを追加...
                                                 </button>
                                             </div>
                                         </div>
@@ -238,11 +375,14 @@ export function CenterPane({
                             )
                         })}
 
-                        <div className="pt-4">
-                            <Button variant="outline" className="w-full border-dashed text-muted-foreground" onClick={() => onCreateGroup?.("New Group")}>
-                                + 新しいグループを追加
-                            </Button>
-                        </div>
+                        <Button
+                            variant="outline"
+                            className="w-full border-dashed text-muted-foreground"
+                            onClick={() => onCreateGroup?.("New Group")}
+                        >
+                            <Plus className="w-4 h-4 mr-2" />
+                            新しいグループを追加
+                        </Button>
                     </div>
                 </ScrollArea>
             </div>
