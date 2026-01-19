@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState, Component, ErrorInfo, ReactNode } from 'react';
 import ReactFlow, {
     Node,
     Edge,
@@ -13,97 +13,122 @@ import ReactFlow, {
     NodeProps,
     Connection,
     addEdge,
-    Panel,
     useReactFlow,
-    ReactFlowProvider
+    ReactFlowProvider,
+    NodeDragHandler
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { Database } from "@/types/database";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Plus, Trash2 } from "lucide-react";
 import dagre from 'dagre';
+import { cn } from "@/lib/utils";
 
 type TaskGroup = Database['public']['Tables']['task_groups']['Row']
 type Project = Database['public']['Tables']['projects']['Row']
+type Task = Database['public']['Tables']['tasks']['Row']
+
+// --- Error Boundary ---
+interface ErrorBoundaryProps {
+    children: ReactNode;
+}
+interface ErrorBoundaryState {
+    hasError: boolean;
+    error: Error | null;
+}
+
+class MindMapErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+    constructor(props: ErrorBoundaryProps) {
+        super(props);
+        this.state = { hasError: false, error: null };
+    }
+
+    static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+        return { hasError: true, error };
+    }
+
+    componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+        console.error('MindMap Error Boundary caught:', error, errorInfo);
+    }
+
+    render() {
+        if (this.state.hasError) {
+            return (
+                <div className="w-full h-full flex items-center justify-center bg-destructive/10 text-destructive p-4">
+                    <div className="text-center">
+                        <p className="font-semibold">マインドマップでエラーが発生しました</p>
+                        <p className="text-sm mt-2">{this.state.error?.message}</p>
+                        <button
+                            onClick={() => this.setState({ hasError: false, error: null })}
+                            className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm"
+                        >
+                            再試行
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+        return this.props.children;
+    }
+}
 
 // --- Layout Configuration ---
-const nodeWidth = 200;
-const nodeHeight = 60;
+const projectNodeWidth = 220;
+const projectNodeHeight = 80;
+const groupNodeWidth = 180;
+const groupNodeHeight = 60;
+const taskNodeWidth = 160;
+const taskNodeHeight = 40;
 
 const getLayoutedElements = (nodes: Node[], edges: Edge[]) => {
+    if (nodes.length === 0) return { nodes: [], edges: [] };
+
     const dagreGraph = new dagre.graphlib.Graph();
     dagreGraph.setDefaultEdgeLabel(() => ({}));
-
-    dagreGraph.setGraph({ rankdir: 'LR' }); // Left to Right layout
+    dagreGraph.setGraph({ rankdir: 'LR' });
 
     nodes.forEach((node) => {
-        // Dynamic height based on type
-        const height = node.type === 'projectNode' ? 80 : 60;
-        dagreGraph.setNode(node.id, { width: nodeWidth, height: height });
+        let width = groupNodeWidth;
+        let height = groupNodeHeight;
+
+        if (node.type === 'projectNode') {
+            width = projectNodeWidth;
+            height = projectNodeHeight;
+        } else if (node.type === 'taskNode') {
+            width = taskNodeWidth;
+            height = taskNodeHeight;
+        }
+
+        dagreGraph.setNode(node.id, { width, height });
     });
 
     edges.forEach((edge) => {
-        dagreGraph.setEdge(edge.source, edge.target);
+        // Only add edge if both source and target exist
+        if (dagreGraph.hasNode(edge.source) && dagreGraph.hasNode(edge.target)) {
+            dagreGraph.setEdge(edge.source, edge.target);
+        }
     });
 
     dagre.layout(dagreGraph);
 
-    nodes.forEach((node) => {
+    const layoutedNodes = nodes.map((node) => {
         const nodeWithPosition = dagreGraph.node(node.id);
-        node.position = {
-            x: nodeWithPosition.x - nodeWidth / 2,
-            y: nodeWithPosition.y - nodeHeight / 2,
-        };
+        if (!nodeWithPosition) return node; // Safety check
 
-        return node;
+        let width = groupNodeWidth;
+        let height = groupNodeHeight;
+        if (node.type === 'projectNode') { width = projectNodeWidth; height = projectNodeHeight; }
+        else if (node.type === 'taskNode') { width = taskNodeWidth; height = taskNodeHeight; }
+
+        return {
+            ...node,
+            position: {
+                x: nodeWithPosition.x - width / 2,
+                y: nodeWithPosition.y - height / 2,
+            }
+        };
     });
 
-    return { nodes, edges };
-};
-
-// --- Custom Node for Task Groups (Editable) ---
-const GroupNode = ({ data, isConnectable, selected }: NodeProps) => {
-    const inputRef = useRef<HTMLInputElement>(null);
-
-    // Auto-focus if created recently (optimization: strict check can be added)
-    useEffect(() => {
-        if (data.isNew && inputRef.current) {
-            inputRef.current.focus();
-            inputRef.current.select();
-        }
-    }, [data.isNew]);
-
-    return (
-        <div className="relative group">
-            <Handle type="target" position={Position.Left} isConnectable={isConnectable} className="!bg-muted-foreground w-2 h-2" />
-
-            <div className={`
-                min-w-[160px] px-4 py-3 rounded-xl 
-                bg-card border transition-all duration-300
-                ${selected ? 'ring-2 ring-primary border-primary shadow-lg scale-105' : 'border-border hover:border-primary/50'}
-                ${data.isNew ? 'border-dashed border-primary bg-primary/5' : ''}
-                shadow-sm
-            `}>
-                <Input
-                    ref={inputRef}
-                    defaultValue={data.label}
-                    className="
-                        h-6 p-0 text-sm font-medium text-center bg-transparent border-none shadow-none 
-                        focus-visible:ring-0 focus:text-primary placeholder:text-muted-foreground/50
-                    "
-                    onBlur={(evt) => data.onLabelChange && data.onLabelChange(data.id, evt.target.value)}
-                    onKeyDown={(evt) => {
-                        if (evt.key === 'Enter') {
-                            evt.currentTarget.blur();
-                        }
-                    }}
-                />
-            </div>
-
-            <Handle type="source" position={Position.Right} isConnectable={isConnectable} className="!bg-muted-foreground w-2 h-2" />
-        </div>
-    );
+    return { nodes: layoutedNodes, edges };
 };
 
 // --- Custom Node for Project (Center) ---
@@ -111,7 +136,7 @@ const ProjectNode = ({ data, isConnectable, selected }: NodeProps) => {
     return (
         <div className="relative group">
             <div className={`
-                min-w-[200px] px-6 py-4 rounded-2xl
+                w-[220px] px-6 py-4 rounded-2xl
                 bg-gradient-to-br from-primary to-primary/80 
                 text-primary-foreground font-bold text-lg 
                 shadow-xl shadow-primary/20 
@@ -127,133 +152,338 @@ const ProjectNode = ({ data, isConnectable, selected }: NodeProps) => {
     );
 };
 
+// --- Custom Node for Task Groups (Editable) ---
+const GroupNode = ({ data, isConnectable, selected }: NodeProps) => {
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        if (data.isNew && inputRef.current) {
+            inputRef.current.focus();
+            inputRef.current.select();
+        }
+    }, [data.isNew]);
+
+    return (
+        <div className="relative group">
+            <Handle type="target" position={Position.Left} isConnectable={isConnectable} className="!bg-muted-foreground w-2 h-2" />
+
+            <div className={`
+                w-[180px] px-4 py-3 rounded-xl 
+                bg-card border transition-all duration-300
+                ${selected ? 'ring-2 ring-primary border-primary shadow-lg scale-105' : 'border-border hover:border-primary/50'}
+                ${data.isNew ? 'border-dashed border-primary bg-primary/5' : ''}
+                shadow-sm
+            `}>
+                <Input
+                    ref={inputRef}
+                    defaultValue={data.label}
+                    className="
+                        h-6 p-0 text-sm font-semibold text-center bg-transparent border-none shadow-none 
+                        focus-visible:ring-0 focus:text-primary placeholder:text-muted-foreground/50
+                    "
+                    onBlur={(evt) => data.onLabelChange && data.onLabelChange(data.id, evt.target.value)}
+                    onKeyDown={(evt) => {
+                        if (evt.key === 'Enter') evt.currentTarget.blur();
+                    }}
+                />
+            </div>
+
+            <Handle type="source" position={Position.Right} isConnectable={isConnectable} className="!bg-muted-foreground w-2 h-2" />
+        </div>
+    );
+};
+
+// --- Custom Node for Tasks (Leaf) ---
+const TaskNode = ({ data, isConnectable, selected }: NodeProps) => {
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        if (data.isNew && inputRef.current) {
+            inputRef.current.focus();
+            inputRef.current.select();
+        }
+    }, [data.isNew]);
+
+    return (
+        <div className="relative group">
+            <Handle type="target" position={Position.Left} isConnectable={isConnectable} className="!bg-muted-foreground/50 w-1.5 h-1.5" />
+
+            <div className={`
+                w-[160px] px-3 py-2 rounded-lg
+                bg-background border transition-all duration-200
+                ${selected ? 'ring-1 ring-primary border-primary shadow-md' : 'border-border hover:border-primary/30'}
+                ${data.isNew ? 'border-dashed border-primary/50' : ''}
+                shadow-sm flex items-center gap-2
+            `}>
+                <div className={cn("w-2 h-2 rounded-full flex-none", data.status === 'done' ? "bg-primary" : "bg-muted-foreground/30")} />
+                <Input
+                    ref={inputRef}
+                    defaultValue={data.label}
+                    className={cn(
+                        "h-5 p-0 text-xs bg-transparent border-none shadow-none focus-visible:ring-0 focus:text-foreground placeholder:text-muted-foreground/50",
+                        data.status === 'done' && "line-through text-muted-foreground"
+                    )}
+                    onBlur={(evt) => data.onLabelChange && data.onLabelChange(data.id, evt.target.value)}
+                    onKeyDown={(evt) => {
+                        if (evt.key === 'Enter') evt.currentTarget.blur();
+                    }}
+                />
+            </div>
+        </div>
+    );
+};
+
+
 const nodeTypes = {
-    groupNode: GroupNode,
     projectNode: ProjectNode,
+    groupNode: GroupNode,
+    taskNode: TaskNode,
 };
 
 interface MindMapProps {
     project: Project
     groups: TaskGroup[]
+    tasks: Task[]
+
     onUpdateGroupTitle: (groupId: string, newTitle: string) => void
     onCreateGroup?: (title: string) => void
     onDeleteGroup?: (groupId: string) => void
+
+    onCreateTask?: (groupId: string, title?: string) => Promise<Task | null>
+    onUpdateTask?: (taskId: string, updates: Partial<Task>) => Promise<void>
+    onDeleteTask?: (taskId: string) => Promise<void>
+    onMoveTask?: (taskId: string, newGroupId: string) => Promise<void>
 }
 
 function MindMapContent({
     project,
     groups,
+    tasks,
     onUpdateGroupTitle,
     onCreateGroup,
-    onDeleteGroup
+    onDeleteGroup,
+    onCreateTask,
+    onUpdateTask,
+    onDeleteTask,
+    onMoveTask
 }: MindMapProps) {
     const [nodes, setNodes, onNodesChange] = useNodesState([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-    const { getNodes, getEdges } = useReactFlow();
+    const { getNodes } = useReactFlow();
+
+    // Debounce flag to prevent rapid key presses
+    const isProcessingRef = useRef(false);
 
     // 1. Construct Graph & Layout
     useEffect(() => {
         if (!project) return;
 
-        // Nodes
-        const projectNode: Node = {
-            id: 'project-root',
-            type: 'projectNode',
-            data: { label: project.title },
-            position: { x: 0, y: 0 },
-        };
+        try {
+            // -- Nodes --
+            const projectNode: Node = {
+                id: 'project-root',
+                type: 'projectNode',
+                data: { label: project.title },
+                position: { x: 0, y: 0 },
+            };
 
-        const groupNodes: Node[] = groups.map((group) => ({
-            id: group.id,
-            type: 'groupNode',
-            data: {
-                label: group.title,
+            const groupNodes: Node[] = groups.map((group) => ({
                 id: group.id,
-                isNew: group.title === 'New Group', // Auto-focus if title is default
-                onLabelChange: (id: string, newVal: string) => {
-                    if (newVal !== group.title) {
-                        onUpdateGroupTitle(id, newVal)
+                type: 'groupNode',
+                data: {
+                    label: group.title,
+                    id: group.id,
+                    isNew: group.title === 'New Group',
+                    onLabelChange: (id: string, newVal: string) => {
+                        if (newVal !== group.title) onUpdateGroupTitle(id, newVal)
                     }
-                }
-            },
-            position: { x: 0, y: 0 },
-        }));
+                },
+                position: { x: 0, y: 0 },
+            }));
 
-        // Edges
-        const groupEdges: Edge[] = groups.map((group) => ({
-            id: `e-root-${group.id}`,
-            source: 'project-root',
-            target: group.id,
-            type: 'smoothstep', // XMind style: structured
-            animated: false,   // Cleaner look
-            style: {
-                stroke: 'hsl(var(--muted-foreground))',
-                strokeWidth: 2,
-                opacity: 0.5
-            },
-            pathOptions: { borderRadius: 20 } // Rounded corners
-        }));
+            const taskNodes: Node[] = tasks.map((task) => ({
+                id: task.id,
+                type: 'taskNode',
+                data: {
+                    label: task.title,
+                    id: task.id,
+                    status: task.status,
+                    groupId: task.group_id,
+                    isNew: task.title === 'New Task',
+                    onLabelChange: (id: string, newVal: string) => {
+                        if (newVal !== task.title && onUpdateTask) {
+                            onUpdateTask(id, { title: newVal }).catch(console.error);
+                        }
+                    }
+                },
+                position: { x: 0, y: 0 },
+            }));
 
-        const rawNodes = [projectNode, ...groupNodes];
-        const rawEdges = groupEdges;
+            // -- Edges --
+            const groupEdges: Edge[] = groups.map((group) => ({
+                id: `e-proj-${group.id}`,
+                source: 'project-root',
+                target: group.id,
+                type: 'smoothstep',
+                animated: false,
+                style: { stroke: 'hsl(var(--muted-foreground))', strokeWidth: 2, opacity: 0.5 },
+            }));
 
-        const layouted = getLayoutedElements(rawNodes, rawEdges);
+            // Only create task edges for tasks that belong to existing groups
+            const groupIds = new Set(groups.map(g => g.id));
+            const taskEdges: Edge[] = tasks
+                .filter(task => groupIds.has(task.group_id))
+                .map((task) => ({
+                    id: `e-group-${task.id}`,
+                    source: task.group_id,
+                    target: task.id,
+                    type: 'smoothstep',
+                    animated: false,
+                    style: { stroke: 'hsl(var(--muted-foreground))', strokeWidth: 1.5, opacity: 0.3 },
+                }));
 
-        setNodes(layouted.nodes);
-        setEdges(layouted.edges);
 
-    }, [project, groups, onUpdateGroupTitle, setNodes, setEdges]);
+            const rawNodes = [projectNode, ...groupNodes, ...taskNodes];
+            const rawEdges = [...groupEdges, ...taskEdges];
+
+            console.log('[MindMap] Building layout with', rawNodes.length, 'nodes and', rawEdges.length, 'edges');
+
+            const layouted = getLayoutedElements(rawNodes, rawEdges);
+
+            setNodes(layouted.nodes);
+            setEdges(layouted.edges);
+        } catch (error) {
+            console.error('[MindMap] Layout error:', error);
+        }
+
+    }, [project, groups, tasks, onUpdateGroupTitle, onUpdateTask, setNodes, setEdges]);
 
 
-    // 2. Keyboard Shortcuts
+    // 2. Keyboard Shortcuts with error handling and debouncing
     useEffect(() => {
-        const handleKeyDown = (event: KeyboardEvent) => {
-            // Ignore if editing text (Input focused)
+        const handleKeyDown = async (event: KeyboardEvent) => {
+            // Ignore if editing text
             if ((event.target as HTMLElement).tagName === 'INPUT') return;
 
-            // Get selected nodes
+            // Debounce: prevent rapid fire
+            if (isProcessingRef.current) return;
+
             const selectedNodes = getNodes().filter((n) => n.selected);
             if (selectedNodes.length === 0) return;
+            const selectedNode = selectedNodes[0];
 
-            const selectedNode = selectedNodes[0]; // Handle primary selection based on single selection for now
-
-            // Enter: New Sibling (for Groups)
+            // Enter: New Sibling
             if (event.key === 'Enter') {
                 event.preventDefault();
-                if (selectedNode.type === 'groupNode' && onCreateGroup) {
-                    onCreateGroup("New Group"); // Sibling of group -> implied by just creating a group
+                event.stopPropagation();
+
+                isProcessingRef.current = true;
+
+                try {
+                    if (selectedNode.type === 'groupNode' && onCreateGroup) {
+                        console.log('[MindMap] Creating sibling group');
+                        onCreateGroup("New Group");
+                    } else if (selectedNode.type === 'taskNode' && onCreateTask) {
+                        console.log('[MindMap] Creating sibling task in group:', selectedNode.data.groupId);
+                        await onCreateTask(selectedNode.data.groupId, "New Task");
+                    }
+                } catch (error) {
+                    console.error('[MindMap] Error creating node:', error);
+                } finally {
+                    // Reset debounce after a short delay
+                    setTimeout(() => { isProcessingRef.current = false; }, 300);
                 }
             }
 
-            // Tab: New Child (for Project)
+            // Tab: New Child
             if (event.key === 'Tab') {
                 event.preventDefault();
-                if (selectedNode.type === 'projectNode' && onCreateGroup) {
-                    onCreateGroup("New Group");
+                event.stopPropagation();
+
+                isProcessingRef.current = true;
+
+                try {
+                    if (selectedNode.type === 'projectNode' && onCreateGroup) {
+                        console.log('[MindMap] Creating child group');
+                        onCreateGroup("New Group");
+                    } else if (selectedNode.type === 'groupNode' && onCreateTask) {
+                        console.log('[MindMap] Creating task in group:', selectedNode.id);
+                        await onCreateTask(selectedNode.id, "New Task");
+                    }
+                } catch (error) {
+                    console.error('[MindMap] Error creating node:', error);
+                } finally {
+                    setTimeout(() => { isProcessingRef.current = false; }, 300);
                 }
             }
 
-            // Delete / Backspace: Delete Node
-            if ((event.key === 'Delete' || event.key === 'Backspace') && onDeleteGroup) {
-                if (selectedNode.type === 'groupNode') {
-                    if (confirm('Delete this group?')) {
+            // Delete
+            if ((event.key === 'Delete' || event.key === 'Backspace')) {
+                event.preventDefault();
+                event.stopPropagation();
+
+                isProcessingRef.current = true;
+
+                try {
+                    if (selectedNode.type === 'groupNode' && onDeleteGroup) {
+                        console.log('[MindMap] Deleting group:', selectedNode.id);
                         onDeleteGroup(selectedNode.id);
+                    } else if (selectedNode.type === 'taskNode' && onDeleteTask) {
+                        console.log('[MindMap] Deleting task:', selectedNode.id);
+                        await onDeleteTask(selectedNode.id);
                     }
+                } catch (error) {
+                    console.error('[MindMap] Error deleting node:', error);
+                } finally {
+                    setTimeout(() => { isProcessingRef.current = false; }, 300);
                 }
             }
         };
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [getNodes, onCreateGroup, onDeleteGroup]);
+    }, [getNodes, onCreateGroup, onDeleteGroup, onCreateTask, onDeleteTask]);
+
+
+    // 3. Drag & Drop (Reparenting)
+    const onNodeDragStop: NodeDragHandler = useCallback(async (event, node) => {
+        if (!onMoveTask || node.type !== 'taskNode') return;
+
+        try {
+            const allNodes = getNodes();
+            const groupNodes = allNodes.filter(n => n.type === 'groupNode' && n.id !== node.data.groupId);
+
+            let closestGroup: Node | null = null;
+            let minDistance = 10000;
+
+            const nodeCenterX = node.position.x + taskNodeWidth / 2;
+            const nodeCenterY = node.position.y + taskNodeHeight / 2;
+
+            for (const group of groupNodes) {
+                const groupCenterX = group.position.x + groupNodeWidth / 2;
+                const groupCenterY = group.position.y + groupNodeHeight / 2;
+
+                const dist = Math.sqrt(Math.pow(nodeCenterX - groupCenterX, 2) + Math.pow(nodeCenterY - groupCenterY, 2));
+                if (dist < minDistance) {
+                    minDistance = dist;
+                    closestGroup = group;
+                }
+            }
+
+            if (closestGroup && minDistance < 150) {
+                console.log('[MindMap] Moving task', node.id, 'to group', closestGroup.id);
+                await onMoveTask(node.id, closestGroup.id);
+            }
+        } catch (error) {
+            console.error('[MindMap] Error moving task:', error);
+        }
+    }, [getNodes, onMoveTask]);
 
 
     const onConnect = useCallback((params: Connection) => {
         setEdges((eds) => addEdge({
             ...params,
             type: 'smoothstep',
-            style: { stroke: 'hsl(var(--muted-foreground))', strokeWidth: 2, opacity: 0.5 },
-            pathOptions: { borderRadius: 20 }
         }, eds))
     }, [setEdges]);
 
@@ -265,24 +495,29 @@ function MindMapContent({
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
                 onConnect={onConnect}
+                onNodeDragStop={onNodeDragStop}
                 nodeTypes={nodeTypes}
                 fitView
-                fitViewOptions={{ padding: 0.3 }}
+                fitViewOptions={{ padding: 0.1 }}
                 attributionPosition="bottom-right"
-                deleteKeyCode={null} // Handled by custom hook
+                deleteKeyCode={null}
+                nodesConnectable={false}
+                nodesDraggable={true}
             >
-                <Background gap={20} size={1} color="hsl(var(--muted-foreground) / 0.1)" />
+                <Background gap={24} size={1} color="hsl(var(--muted-foreground) / 0.1)" />
                 <Controls showInteractive={false} />
             </ReactFlow>
         </div>
     );
 }
 
-// Wrap with Provider to use ReactFlow hooks
+// Wrap with Provider and Error Boundary
 export function MindMap(props: MindMapProps) {
     return (
-        <ReactFlowProvider>
-            <MindMapContent {...props} />
-        </ReactFlowProvider>
+        <MindMapErrorBoundary>
+            <ReactFlowProvider>
+                <MindMapContent {...props} />
+            </ReactFlowProvider>
+        </MindMapErrorBoundary>
     );
 }

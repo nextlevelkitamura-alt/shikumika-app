@@ -63,20 +63,27 @@ export function DashboardClient({
 
     const {
         groups: currentGroups,
+        tasks: syncedTasks,
         createGroup,
         updateGroupTitle,
         deleteGroup,
+        createTask,
+        updateTask,
+        deleteTask,
+        moveTask,
         isLoading
     } = useMindMapSync({
         projectId: selectedProjectId,
         userId,
-        initialGroups: projectGroupsInitial
+        initialGroups: projectGroupsInitial,
+        initialTasks: initialTasks
     })
 
-    // Get tasks for current groups
-    const currentTasks = tasks.filter(t =>
-        currentGroups.some(g => g.id === t.group_id)
-    )
+    // Get tasks for current groups (syncedTasks already filtered by hook logic mostly, but let's trust hook's filtered list if we implemented it right)
+    // Actually hook returns ALL tasks it tracks. We should double check if we need to filter further.
+    // The hook logic forces filtering by insertion, but let's iterate safely.
+    // Actually the hook filters tasks by `groups` presence. So `syncedTasks` are correct.
+    const currentTasks = syncedTasks
 
     // --- Handlers ---
     const handleCreateGroup = async (title: string) => {
@@ -89,8 +96,6 @@ export function DashboardClient({
 
     const handleDeleteGroup = async (groupId: string) => {
         await deleteGroup(groupId)
-        // Also remove tasks that belonged to this group from local state
-        setTasks(prev => prev.filter(t => t.group_id !== groupId))
     }
 
     return (
@@ -116,6 +121,11 @@ export function DashboardClient({
                     onUpdateGroupTitle={handleUpdateGroupTitle}
                     onCreateGroup={handleCreateGroup}
                     onDeleteGroup={handleDeleteGroup}
+
+                    onCreateTask={createTask}
+                    onUpdateTask={updateTask}
+                    onDeleteTask={deleteTask}
+                    onMoveTask={moveTask}
                 />
             </div>
 

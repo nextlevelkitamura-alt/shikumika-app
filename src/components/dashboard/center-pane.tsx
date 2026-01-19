@@ -18,6 +18,11 @@ interface CenterPaneProps {
     onUpdateGroupTitle?: (groupId: string, newTitle: string) => void
     onCreateGroup?: (title: string) => void
     onDeleteGroup?: (groupId: string) => void
+
+    onCreateTask?: (groupId: string, title?: string) => Promise<Task | null>
+    onUpdateTask?: (taskId: string, updates: Partial<Task>) => Promise<void>
+    onDeleteTask?: (taskId: string) => Promise<void>
+    onMoveTask?: (taskId: string, newGroupId: string) => Promise<void>
 }
 
 export function CenterPane({
@@ -26,7 +31,11 @@ export function CenterPane({
     tasks,
     onUpdateGroupTitle,
     onCreateGroup,
-    onDeleteGroup
+    onDeleteGroup,
+    onCreateTask,
+    onUpdateTask,
+    onDeleteTask,
+    onMoveTask
 }: CenterPaneProps) {
 
     const getGroupColor = (index: number) => {
@@ -54,9 +63,15 @@ export function CenterPane({
                 <MindMap
                     project={project}
                     groups={groups}
+                    tasks={tasks} // Pass ALL tasks to MindMap
                     onUpdateGroupTitle={onUpdateGroupTitle || (() => { })}
                     onCreateGroup={onCreateGroup}
                     onDeleteGroup={onDeleteGroup}
+
+                    onCreateTask={onCreateTask}
+                    onUpdateTask={onUpdateTask}
+                    onDeleteTask={onDeleteTask}
+                    onMoveTask={onMoveTask}
                 />
             </div>
 
