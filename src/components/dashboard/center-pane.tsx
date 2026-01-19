@@ -9,7 +9,7 @@ import { MoreHorizontal, Play, Check, ChevronRight, ChevronDown, GripHorizontal 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import { MindMap } from "./mind-map"
-import { Progress } from "@/components/ui/progress"
+
 
 type Project = Database['public']['Tables']['projects']['Row']
 type TaskGroup = Database['public']['Tables']['task_groups']['Row']
