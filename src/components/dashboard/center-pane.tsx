@@ -59,8 +59,16 @@ function TaskItem({
 }) {
     const [isExpanded, setIsExpanded] = useState(true)
 
+    // Safety: Return null if task is invalid
+    if (!task || !task.id) {
+        return null;
+    }
+
+    // Safely filter allTasks to prevent undefined access
+    const safeTasks = (allTasks ?? []).filter(t => t && t.id);
+
     // Get child tasks
-    const childTasks = allTasks.filter(t => t.parent_task_id === task.id).sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0))
+    const childTasks = safeTasks.filter(t => t.parent_task_id === task.id).sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0))
     const hasChildren = childTasks.length > 0
 
     // Calculate progress for parent tasks
@@ -71,6 +79,7 @@ function TaskItem({
             await onCreateTask(groupId, "New Subtask", task.id)
         }
     }
+
 
     return (
         <div className="w-full">

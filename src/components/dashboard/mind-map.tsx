@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useState, Component, ErrorInfo, ReactNode } from 'react';
+import React, { useEffect, useState, useMemo, useRef, Component, ErrorInfo, ReactNode } from 'react';
 import ReactFlow, {
     Node,
     Edge,
@@ -22,23 +22,19 @@ type Project = Database['public']['Tables']['projects']['Row']
 type Task = Database['public']['Tables']['tasks']['Row']
 
 // --- Error Boundary ---
-interface ErrorBoundaryState {
-    hasError: boolean;
-    error: Error | null;
-}
-
-class MindMapErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryState> {
-    constructor(props: { children: ReactNode }) {
+class MindMapErrorBoundary extends Component<{ children: ReactNode; onError?: () => void }, { hasError: boolean }> {
+    constructor(props: { children: ReactNode; onError?: () => void }) {
         super(props);
-        this.state = { hasError: false, error: null };
+        this.state = { hasError: false };
     }
 
-    static getDerivedStateFromError(error: Error): ErrorBoundaryState {
-        return { hasError: true, error };
+    static getDerivedStateFromError(): { hasError: boolean } {
+        return { hasError: true };
     }
 
     componentDidCatch(error: Error, errorInfo: ErrorInfo) {
         console.error('[MindMap Error Boundary]', error, errorInfo);
+        this.props.onError?.();
     }
 
     render() {
@@ -48,7 +44,7 @@ class MindMapErrorBoundary extends Component<{ children: ReactNode }, ErrorBound
                     <div className="text-center text-muted-foreground">
                         <p className="text-sm">マインドマップを読み込み中...</p>
                         <button
-                            onClick={() => this.setState({ hasError: false, error: null })}
+                            onClick={() => this.setState({ hasError: false })}
                             className="text-xs text-primary underline mt-2"
                         >
                             再試行
@@ -61,36 +57,32 @@ class MindMapErrorBoundary extends Component<{ children: ReactNode }, ErrorBound
     }
 }
 
-// --- Safe Layout with defensive checks ---
-const layoutNodes = (project: Project | null | undefined, groups: TaskGroup[], tasks: Task[]): { nodes: Node[], edges: Edge[] } => {
+// --- Safe Layout Function ---
+function createLayoutNodes(project: Project | null, groups: TaskGroup[], tasks: Task[]): { nodes: Node[], edges: Edge[] } {
     const nodes: Node[] = [];
     const edges: Edge[] = [];
 
-    // Defensive: Return empty if no project
-    if (!project || !project.id) {
-        return { nodes: [], edges: [] };
-    }
+    if (!project?.id) return { nodes, edges };
 
     try {
         // Project node
         nodes.push({
             id: 'project-root',
             type: 'projectNode',
-            data: { label: project.title || 'Project' },
+            data: { label: project.title ?? 'Project' },
             position: { x: 50, y: 200 },
         });
 
-        // Defensive: Ensure groups is an array
-        const safeGroups = Array.isArray(groups) ? groups : [];
+        // Safe groups array
+        const safeGroups = (groups ?? []).filter(g => g?.id);
+        const groupIds = new Set(safeGroups.map(g => g.id));
 
         // Group nodes
         safeGroups.forEach((group, index) => {
-            if (!group || !group.id) return;
-
             nodes.push({
                 id: group.id,
                 type: 'groupNode',
-                data: { label: group.title || 'Group', id: group.id },
+                data: { label: group.title ?? 'Group' },
                 position: { x: 300, y: 50 + index * 100 },
             });
             edges.push({
@@ -101,33 +93,27 @@ const layoutNodes = (project: Project | null | undefined, groups: TaskGroup[], t
             });
         });
 
-        // Defensive: Ensure tasks is an array
-        const safeTasks = Array.isArray(tasks) ? tasks : [];
+        // Safe tasks - only include tasks with valid group_id
+        const safeTasks = (tasks ?? []).filter(t => t?.id && t?.group_id && groupIds.has(t.group_id));
 
-        // Filter tasks to only those with valid group_id that exists in groups
-        const groupIds = new Set(safeGroups.map(g => g.id));
-        const validTasks = safeTasks.filter(t => t && t.id && t.group_id && groupIds.has(t.group_id));
-
-        // Task nodes by group
+        // Group tasks by group_id
         const tasksByGroup: Record<string, Task[]> = {};
-        validTasks.forEach(task => {
-            if (!tasksByGroup[task.group_id]) tasksByGroup[task.group_id] = [];
-            tasksByGroup[task.group_id].push(task);
+        safeTasks.forEach(task => {
+            const gid = task.group_id;
+            if (!tasksByGroup[gid]) tasksByGroup[gid] = [];
+            tasksByGroup[gid].push(task);
         });
 
+        // Task nodes
         safeGroups.forEach((group, groupIndex) => {
-            if (!group || !group.id) return;
-
-            const groupTasks = tasksByGroup[group.id] || [];
+            const groupTasks = tasksByGroup[group.id] ?? [];
             groupTasks.forEach((task, taskIndex) => {
                 nodes.push({
                     id: task.id,
                     type: 'taskNode',
                     data: {
-                        label: task.title || 'Task',
-                        id: task.id,
-                        groupId: task.group_id,
-                        status: task.status || 'todo'
+                        label: task.title ?? 'Task',
+                        status: task.status ?? 'todo'
                     },
                     position: { x: 520, y: 30 + groupIndex * 100 + taskIndex * 50 },
                 });
@@ -140,43 +126,34 @@ const layoutNodes = (project: Project | null | undefined, groups: TaskGroup[], t
             });
         });
     } catch (err) {
-        console.error('[MindMap layoutNodes] Error during layout:', err);
+        console.error('[MindMap] Layout error:', err);
         return { nodes: [], edges: [] };
     }
 
     return { nodes, edges };
-};
+}
 
 // --- Custom Nodes ---
-const ProjectNode = ({ data, selected }: NodeProps) => (
-    <div className={cn(
-        "w-[180px] px-4 py-3 rounded-xl bg-primary text-primary-foreground font-bold text-center shadow-lg",
-        selected && "ring-2 ring-white"
-    )}>
-        {data?.label || 'Project'}
+const ProjectNode = ({ data }: NodeProps) => (
+    <div className="w-[180px] px-4 py-3 rounded-xl bg-primary text-primary-foreground font-bold text-center shadow-lg">
+        {data?.label ?? 'Project'}
         <Handle type="source" position={Position.Right} className="!bg-primary-foreground" />
     </div>
 );
 
-const GroupNode = ({ data, selected }: NodeProps) => (
-    <div className={cn(
-        "w-[150px] px-3 py-2 rounded-lg bg-card border text-sm font-medium text-center shadow",
-        selected && "ring-2 ring-primary border-primary"
-    )}>
+const GroupNode = ({ data }: NodeProps) => (
+    <div className="w-[150px] px-3 py-2 rounded-lg bg-card border text-sm font-medium text-center shadow">
         <Handle type="target" position={Position.Left} className="!bg-muted-foreground" />
-        {data?.label || 'Group'}
+        {data?.label ?? 'Group'}
         <Handle type="source" position={Position.Right} className="!bg-muted-foreground" />
     </div>
 );
 
-const TaskNode = ({ data, selected }: NodeProps) => (
-    <div className={cn(
-        "w-[130px] px-2 py-1.5 rounded bg-background border text-xs shadow-sm flex items-center gap-1",
-        selected && "ring-1 ring-primary border-primary"
-    )}>
+const TaskNode = ({ data }: NodeProps) => (
+    <div className="w-[130px] px-2 py-1.5 rounded bg-background border text-xs shadow-sm flex items-center gap-1">
         <Handle type="target" position={Position.Left} className="!bg-muted-foreground/50 !w-1 !h-1" />
         <div className={cn("w-1.5 h-1.5 rounded-full", data?.status === 'done' ? "bg-primary" : "bg-muted-foreground/30")} />
-        <span className={cn("truncate", data?.status === 'done' && "line-through text-muted-foreground")}>{data?.label || 'Task'}</span>
+        <span className={cn("truncate", data?.status === 'done' && "line-through text-muted-foreground")}>{data?.label ?? 'Task'}</span>
     </div>
 );
 
@@ -195,43 +172,64 @@ interface MindMapProps {
     onMoveTask?: (taskId: string, newGroupId: string) => Promise<void>
 }
 
-function MindMapContent({
-    project,
-    groups,
-    tasks,
-}: MindMapProps) {
+function MindMapContent({ project, groups, tasks }: MindMapProps) {
     const [nodes, setNodes, onNodesChange] = useNodesState([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-    const [layoutError, setLayoutError] = useState(false);
 
-    // Layout effect with error handling
+    // Debounce layout updates to prevent rapid re-renders from crashing
+    const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const lastDataRef = useRef({ project, groups, tasks });
+
+    // Memoize the data to prevent unnecessary recalculations
+    const stableData = useMemo(() => {
+        return {
+            projectId: project?.id,
+            groupCount: groups?.length ?? 0,
+            taskCount: tasks?.length ?? 0,
+            groupIds: (groups ?? []).map(g => g?.id).filter(Boolean).join(','),
+            taskIds: (tasks ?? []).map(t => t?.id).filter(Boolean).join(','),
+        };
+    }, [project?.id, groups, tasks]);
+
     useEffect(() => {
-        if (!project) {
-            setNodes([]);
-            setEdges([]);
-            return;
+        // Clear any pending update
+        if (updateTimeoutRef.current) {
+            clearTimeout(updateTimeoutRef.current);
         }
 
-        try {
-            const { nodes: layoutedNodes, edges: layoutedEdges } = layoutNodes(project, groups, tasks);
-            setNodes(layoutedNodes);
-            setEdges(layoutedEdges);
-            setLayoutError(false);
-        } catch (err) {
-            console.error('[MindMap] Layout error:', err);
-            setLayoutError(true);
-            setNodes([]);
-            setEdges([]);
-        }
-    }, [project, groups, tasks, setNodes, setEdges]);
+        // Update ref immediately
+        lastDataRef.current = { project, groups, tasks };
 
-    if (layoutError) {
-        return (
-            <div className="w-full h-full bg-muted/5 flex items-center justify-center text-muted-foreground">
-                <p className="text-sm">レイアウトエラー</p>
-            </div>
-        );
-    }
+        // Debounce the actual layout update
+        updateTimeoutRef.current = setTimeout(() => {
+            try {
+                const { project: p, groups: g, tasks: t } = lastDataRef.current;
+                if (!p?.id) {
+                    setNodes([]);
+                    setEdges([]);
+                    return;
+                }
+
+                // Use stable arrays to prevent issues
+                const safeGroups = Array.isArray(g) ? g : [];
+                const safeTasks = Array.isArray(t) ? t : [];
+
+                const { nodes: newNodes, edges: newEdges } = createLayoutNodes(p, safeGroups, safeTasks);
+                setNodes(newNodes);
+                setEdges(newEdges);
+            } catch (err) {
+                console.error('[MindMap] Debounced layout error:', err);
+                setNodes([]);
+                setEdges([]);
+            }
+        }, 100); // 100ms debounce
+
+        return () => {
+            if (updateTimeoutRef.current) {
+                clearTimeout(updateTimeoutRef.current);
+            }
+        };
+    }, [stableData, setNodes, setEdges]);
 
     return (
         <div className="w-full h-full bg-muted/5">
@@ -248,6 +246,8 @@ function MindMapContent({
                 nodesDraggable={false}
                 panOnScroll={true}
                 zoomOnScroll={true}
+                minZoom={0.5}
+                maxZoom={1.5}
             >
                 <Background gap={20} size={1} color="hsl(var(--muted-foreground) / 0.1)" />
                 <Controls showInteractive={false} />
@@ -258,14 +258,23 @@ function MindMapContent({
 
 export function MindMap(props: MindMapProps) {
     const [mounted, setMounted] = useState(false);
-    useEffect(() => { setMounted(true); }, []);
+    const [renderKey, setRenderKey] = useState(0);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
+    const handleError = () => {
+        // Force re-render with new key on error
+        setRenderKey(k => k + 1);
+    };
 
     if (!mounted) {
         return <div className="w-full h-full bg-muted/5 flex items-center justify-center text-muted-foreground">Loading...</div>;
     }
 
     return (
-        <MindMapErrorBoundary>
+        <MindMapErrorBoundary key={renderKey} onError={handleError}>
             <ReactFlowProvider>
                 <MindMapContent {...props} />
             </ReactFlowProvider>
