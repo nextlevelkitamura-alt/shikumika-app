@@ -82,69 +82,74 @@ const taskNodeHeight = 40;
 const getLayoutedElements = (nodes: Node[], edges: Edge[]) => {
     if (nodes.length === 0) return { nodes: [], edges: [] };
 
-    const dagreGraph = new dagre.graphlib.Graph();
-    dagreGraph.setDefaultEdgeLabel(() => ({}));
-    dagreGraph.setGraph({ rankdir: 'LR' });
+    try {
+        const dagreGraph = new dagre.graphlib.Graph();
+        dagreGraph.setDefaultEdgeLabel(() => ({}));
+        dagreGraph.setGraph({ rankdir: 'LR' });
 
-    nodes.forEach((node) => {
-        let width = groupNodeWidth;
-        let height = groupNodeHeight;
+        nodes.forEach((node) => {
+            let width = groupNodeWidth;
+            let height = groupNodeHeight;
 
-        if (node.type === 'projectNode') {
-            width = projectNodeWidth;
-            height = projectNodeHeight;
-        } else if (node.type === 'taskNode') {
-            width = taskNodeWidth;
-            height = taskNodeHeight;
-        }
-
-        dagreGraph.setNode(node.id, { width, height });
-    });
-
-    edges.forEach((edge) => {
-        // Only add edge if both source and target exist
-        if (dagreGraph.hasNode(edge.source) && dagreGraph.hasNode(edge.target)) {
-            dagreGraph.setEdge(edge.source, edge.target);
-        }
-    });
-
-    dagre.layout(dagreGraph);
-
-    const layoutedNodes = nodes.map((node) => {
-        const nodeWithPosition = dagreGraph.node(node.id);
-        if (!nodeWithPosition) return node; // Safety check
-
-        let width = groupNodeWidth;
-        let height = groupNodeHeight;
-        if (node.type === 'projectNode') { width = projectNodeWidth; height = projectNodeHeight; }
-        else if (node.type === 'taskNode') { width = taskNodeWidth; height = taskNodeHeight; }
-
-        return {
-            ...node,
-            position: {
-                x: nodeWithPosition.x - width / 2,
-                y: nodeWithPosition.y - height / 2,
+            if (node.type === 'projectNode') {
+                width = projectNodeWidth;
+                height = projectNodeHeight;
+            } else if (node.type === 'taskNode') {
+                width = taskNodeWidth;
+                height = taskNodeHeight;
             }
-        };
-    });
 
-    return { nodes: layoutedNodes, edges };
+            dagreGraph.setNode(node.id, { width, height });
+        });
+
+        edges.forEach((edge) => {
+            if (dagreGraph.hasNode(edge.source) && dagreGraph.hasNode(edge.target)) {
+                dagreGraph.setEdge(edge.source, edge.target);
+            }
+        });
+
+        dagre.layout(dagreGraph);
+
+        const layoutedNodes = nodes.map((node) => {
+            const nodeWithPosition = dagreGraph.node(node.id);
+            if (!nodeWithPosition) return node;
+
+            let width = groupNodeWidth;
+            let height = groupNodeHeight;
+            if (node.type === 'projectNode') { width = projectNodeWidth; height = projectNodeHeight; }
+            else if (node.type === 'taskNode') { width = taskNodeWidth; height = taskNodeHeight; }
+
+            return {
+                ...node,
+                position: {
+                    x: nodeWithPosition.x - width / 2,
+                    y: nodeWithPosition.y - height / 2,
+                }
+            };
+        });
+
+        return { nodes: layoutedNodes, edges };
+    } catch (error) {
+        console.error('[MindMap] Dagre layout error:', error);
+        return { nodes, edges };
+    }
 };
 
 // --- Custom Node for Project (Center) ---
 const ProjectNode = ({ data, isConnectable, selected }: NodeProps) => {
     return (
         <div className="relative group">
-            <div className={`
-                w-[220px] px-6 py-4 rounded-2xl
-                bg-gradient-to-br from-primary to-primary/80 
-                text-primary-foreground font-bold text-lg 
-                shadow-xl shadow-primary/20 
-                border border-white/10
-                flex items-center justify-center text-center
-                transition-all duration-300
-                ${selected ? 'ring-4 ring-primary/30 scale-105' : 'hover:scale-105'}
-            `}>
+            <div className={cn(
+                "w-[220px] px-6 py-4 rounded-2xl",
+                "bg-gradient-to-br from-primary to-primary/80",
+                "text-primary-foreground font-bold text-lg",
+                "shadow-xl shadow-primary/20",
+                "border border-white/10",
+                "flex items-center justify-center text-center",
+                "transition-all duration-300",
+                selected && "ring-4 ring-primary/30 scale-105",
+                !selected && "hover:scale-105"
+            )}>
                 {data.label}
             </div>
             <Handle type="source" position={Position.Right} isConnectable={isConnectable} className="!bg-primary !w-3 !h-3" />
@@ -163,27 +168,34 @@ const GroupNode = ({ data, isConnectable, selected }: NodeProps) => {
         }
     }, [data.isNew]);
 
+    const handleBlur = useCallback((evt: React.FocusEvent<HTMLInputElement>) => {
+        if (data.onLabelChange && evt.target.value !== data.label) {
+            data.onLabelChange(data.id, evt.target.value);
+        }
+    }, [data]);
+
     return (
         <div className="relative group">
             <Handle type="target" position={Position.Left} isConnectable={isConnectable} className="!bg-muted-foreground w-2 h-2" />
 
-            <div className={`
-                w-[180px] px-4 py-3 rounded-xl 
-                bg-card border transition-all duration-300
-                ${selected ? 'ring-2 ring-primary border-primary shadow-lg scale-105' : 'border-border hover:border-primary/50'}
-                ${data.isNew ? 'border-dashed border-primary bg-primary/5' : ''}
-                shadow-sm
-            `}>
+            <div className={cn(
+                "w-[180px] px-4 py-3 rounded-xl",
+                "bg-card border shadow-sm",
+                "transition-all duration-300",
+                selected && "ring-2 ring-primary border-primary shadow-lg scale-105",
+                !selected && "border-border hover:border-primary/50",
+                data.isNew && "border-dashed border-primary bg-primary/5"
+            )}>
                 <Input
                     ref={inputRef}
                     defaultValue={data.label}
-                    className="
-                        h-6 p-0 text-sm font-semibold text-center bg-transparent border-none shadow-none 
-                        focus-visible:ring-0 focus:text-primary placeholder:text-muted-foreground/50
-                    "
-                    onBlur={(evt) => data.onLabelChange && data.onLabelChange(data.id, evt.target.value)}
+                    className="h-6 p-0 text-sm font-semibold text-center bg-transparent border-none shadow-none focus-visible:ring-0 focus:text-primary placeholder:text-muted-foreground/50"
+                    onBlur={handleBlur}
                     onKeyDown={(evt) => {
-                        if (evt.key === 'Enter') evt.currentTarget.blur();
+                        if (evt.key === 'Enter') {
+                            evt.preventDefault();
+                            evt.currentTarget.blur();
+                        }
                     }}
                 />
             </div>
@@ -204,17 +216,25 @@ const TaskNode = ({ data, isConnectable, selected }: NodeProps) => {
         }
     }, [data.isNew]);
 
+    const handleBlur = useCallback((evt: React.FocusEvent<HTMLInputElement>) => {
+        if (data.onLabelChange && evt.target.value !== data.label) {
+            data.onLabelChange(data.id, evt.target.value);
+        }
+    }, [data]);
+
     return (
         <div className="relative group">
             <Handle type="target" position={Position.Left} isConnectable={isConnectable} className="!bg-muted-foreground/50 w-1.5 h-1.5" />
 
-            <div className={`
-                w-[160px] px-3 py-2 rounded-lg
-                bg-background border transition-all duration-200
-                ${selected ? 'ring-1 ring-primary border-primary shadow-md' : 'border-border hover:border-primary/30'}
-                ${data.isNew ? 'border-dashed border-primary/50' : ''}
-                shadow-sm flex items-center gap-2
-            `}>
+            <div className={cn(
+                "w-[160px] px-3 py-2 rounded-lg",
+                "bg-background border shadow-sm",
+                "transition-all duration-200",
+                "flex items-center gap-2",
+                selected && "ring-1 ring-primary border-primary shadow-md",
+                !selected && "border-border hover:border-primary/30",
+                data.isNew && "border-dashed border-primary/50"
+            )}>
                 <div className={cn("w-2 h-2 rounded-full flex-none", data.status === 'done' ? "bg-primary" : "bg-muted-foreground/30")} />
                 <Input
                     ref={inputRef}
@@ -223,9 +243,12 @@ const TaskNode = ({ data, isConnectable, selected }: NodeProps) => {
                         "h-5 p-0 text-xs bg-transparent border-none shadow-none focus-visible:ring-0 focus:text-foreground placeholder:text-muted-foreground/50",
                         data.status === 'done' && "line-through text-muted-foreground"
                     )}
-                    onBlur={(evt) => data.onLabelChange && data.onLabelChange(data.id, evt.target.value)}
+                    onBlur={handleBlur}
                     onKeyDown={(evt) => {
-                        if (evt.key === 'Enter') evt.currentTarget.blur();
+                        if (evt.key === 'Enter') {
+                            evt.preventDefault();
+                            evt.currentTarget.blur();
+                        }
                     }}
                 />
             </div>
@@ -279,7 +302,6 @@ function MindMapContent({
         if (!project) return;
 
         try {
-            // -- Nodes --
             const projectNode: Node = {
                 id: 'project-root',
                 type: 'projectNode',
@@ -294,9 +316,7 @@ function MindMapContent({
                     label: group.title,
                     id: group.id,
                     isNew: group.title === 'New Group',
-                    onLabelChange: (id: string, newVal: string) => {
-                        if (newVal !== group.title) onUpdateGroupTitle(id, newVal)
-                    }
+                    onLabelChange: onUpdateGroupTitle
                 },
                 position: { x: 0, y: 0 },
             }));
@@ -310,16 +330,15 @@ function MindMapContent({
                     status: task.status,
                     groupId: task.group_id,
                     isNew: task.title === 'New Task',
-                    onLabelChange: (id: string, newVal: string) => {
-                        if (newVal !== task.title && onUpdateTask) {
-                            onUpdateTask(id, { title: newVal }).catch(console.error);
-                        }
-                    }
+                    onLabelChange: onUpdateTask ? (id: string, newVal: string) => {
+                        onUpdateTask(id, { title: newVal }).catch(console.error);
+                    } : undefined
                 },
                 position: { x: 0, y: 0 },
             }));
 
-            // -- Edges --
+            const groupIds = new Set(groups.map(g => g.id));
+
             const groupEdges: Edge[] = groups.map((group) => ({
                 id: `e-proj-${group.id}`,
                 source: 'project-root',
@@ -329,10 +348,8 @@ function MindMapContent({
                 style: { stroke: 'hsl(var(--muted-foreground))', strokeWidth: 2, opacity: 0.5 },
             }));
 
-            // Only create task edges for tasks that belong to existing groups
-            const groupIds = new Set(groups.map(g => g.id));
             const taskEdges: Edge[] = tasks
-                .filter(task => groupIds.has(task.group_id))
+                .filter(task => task.group_id && groupIds.has(task.group_id))
                 .map((task) => ({
                     id: `e-group-${task.id}`,
                     source: task.group_id,
@@ -342,11 +359,8 @@ function MindMapContent({
                     style: { stroke: 'hsl(var(--muted-foreground))', strokeWidth: 1.5, opacity: 0.3 },
                 }));
 
-
             const rawNodes = [projectNode, ...groupNodes, ...taskNodes];
             const rawEdges = [...groupEdges, ...taskEdges];
-
-            console.log('[MindMap] Building layout with', rawNodes.length, 'nodes and', rawEdges.length, 'edges');
 
             const layouted = getLayoutedElements(rawNodes, rawEdges);
 
@@ -359,40 +373,53 @@ function MindMapContent({
     }, [project, groups, tasks, onUpdateGroupTitle, onUpdateTask, setNodes, setEdges]);
 
 
-    // 2. Keyboard Shortcuts with error handling and debouncing
+    // 2. Keyboard Shortcuts - SYNCHRONOUS wrapper to avoid unhandled promise rejections
     useEffect(() => {
-        const handleKeyDown = async (event: KeyboardEvent) => {
+        const handleKeyDown = (event: KeyboardEvent) => {
             // Ignore if editing text
-            if ((event.target as HTMLElement).tagName === 'INPUT') return;
+            const target = event.target as HTMLElement;
+            if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
 
-            // Debounce: prevent rapid fire
+            // Debounce
             if (isProcessingRef.current) return;
 
-            const selectedNodes = getNodes().filter((n) => n.selected);
+            let selectedNodes: Node[];
+            try {
+                selectedNodes = getNodes().filter((n) => n.selected);
+            } catch {
+                return;
+            }
+
             if (selectedNodes.length === 0) return;
             const selectedNode = selectedNodes[0];
+
+            // Helper to safely call async functions
+            const safeAsync = (fn: () => Promise<unknown>) => {
+                isProcessingRef.current = true;
+                fn()
+                    .catch((err) => console.error('[MindMap] Async operation failed:', err))
+                    .finally(() => {
+                        setTimeout(() => { isProcessingRef.current = false; }, 300);
+                    });
+            };
 
             // Enter: New Sibling
             if (event.key === 'Enter') {
                 event.preventDefault();
                 event.stopPropagation();
 
-                isProcessingRef.current = true;
-
-                try {
-                    if (selectedNode.type === 'groupNode' && onCreateGroup) {
-                        console.log('[MindMap] Creating sibling group');
+                if (selectedNode.type === 'groupNode' && onCreateGroup) {
+                    isProcessingRef.current = true;
+                    try {
                         onCreateGroup("New Group");
-                    } else if (selectedNode.type === 'taskNode' && onCreateTask) {
-                        console.log('[MindMap] Creating sibling task in group:', selectedNode.data.groupId);
-                        await onCreateTask(selectedNode.data.groupId, "New Task");
+                    } catch (e) {
+                        console.error('[MindMap] Error creating group:', e);
                     }
-                } catch (error) {
-                    console.error('[MindMap] Error creating node:', error);
-                } finally {
-                    // Reset debounce after a short delay
                     setTimeout(() => { isProcessingRef.current = false; }, 300);
+                } else if (selectedNode.type === 'taskNode' && onCreateTask && selectedNode.data?.groupId) {
+                    safeAsync(() => onCreateTask(selectedNode.data.groupId, "New Task"));
                 }
+                return;
             }
 
             // Tab: New Child
@@ -400,43 +427,37 @@ function MindMapContent({
                 event.preventDefault();
                 event.stopPropagation();
 
-                isProcessingRef.current = true;
-
-                try {
-                    if (selectedNode.type === 'projectNode' && onCreateGroup) {
-                        console.log('[MindMap] Creating child group');
+                if (selectedNode.type === 'projectNode' && onCreateGroup) {
+                    isProcessingRef.current = true;
+                    try {
                         onCreateGroup("New Group");
-                    } else if (selectedNode.type === 'groupNode' && onCreateTask) {
-                        console.log('[MindMap] Creating task in group:', selectedNode.id);
-                        await onCreateTask(selectedNode.id, "New Task");
+                    } catch (e) {
+                        console.error('[MindMap] Error creating group:', e);
                     }
-                } catch (error) {
-                    console.error('[MindMap] Error creating node:', error);
-                } finally {
                     setTimeout(() => { isProcessingRef.current = false; }, 300);
+                } else if (selectedNode.type === 'groupNode' && onCreateTask) {
+                    safeAsync(() => onCreateTask(selectedNode.id, "New Task"));
                 }
+                return;
             }
 
-            // Delete
-            if ((event.key === 'Delete' || event.key === 'Backspace')) {
+            // Delete / Backspace
+            if (event.key === 'Delete' || event.key === 'Backspace') {
                 event.preventDefault();
                 event.stopPropagation();
 
-                isProcessingRef.current = true;
-
-                try {
-                    if (selectedNode.type === 'groupNode' && onDeleteGroup) {
-                        console.log('[MindMap] Deleting group:', selectedNode.id);
+                if (selectedNode.type === 'groupNode' && onDeleteGroup) {
+                    isProcessingRef.current = true;
+                    try {
                         onDeleteGroup(selectedNode.id);
-                    } else if (selectedNode.type === 'taskNode' && onDeleteTask) {
-                        console.log('[MindMap] Deleting task:', selectedNode.id);
-                        await onDeleteTask(selectedNode.id);
+                    } catch (e) {
+                        console.error('[MindMap] Error deleting group:', e);
                     }
-                } catch (error) {
-                    console.error('[MindMap] Error deleting node:', error);
-                } finally {
                     setTimeout(() => { isProcessingRef.current = false; }, 300);
+                } else if (selectedNode.type === 'taskNode' && onDeleteTask) {
+                    safeAsync(() => onDeleteTask(selectedNode.id));
                 }
+                return;
             }
         };
 
@@ -446,8 +467,9 @@ function MindMapContent({
 
 
     // 3. Drag & Drop (Reparenting)
-    const onNodeDragStop: NodeDragHandler = useCallback(async (event, node) => {
+    const onNodeDragStop: NodeDragHandler = useCallback((event, node) => {
         if (!onMoveTask || node.type !== 'taskNode') return;
+        if (!node.data?.groupId) return;
 
         try {
             const allNodes = getNodes();
@@ -471,11 +493,10 @@ function MindMapContent({
             }
 
             if (closestGroup && minDistance < 150) {
-                console.log('[MindMap] Moving task', node.id, 'to group', closestGroup.id);
-                await onMoveTask(node.id, closestGroup.id);
+                onMoveTask(node.id, closestGroup.id).catch(console.error);
             }
         } catch (error) {
-            console.error('[MindMap] Error moving task:', error);
+            console.error('[MindMap] Error in drag stop:', error);
         }
     }, [getNodes, onMoveTask]);
 
