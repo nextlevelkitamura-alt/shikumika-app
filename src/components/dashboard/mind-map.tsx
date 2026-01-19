@@ -1,13 +1,11 @@
 "use client"
 
-import React, { useEffect, useState, useMemo, useRef, Component, ErrorInfo, ReactNode } from 'react';
+import React, { useEffect, useState, useRef, useMemo, Component, ErrorInfo, ReactNode } from 'react';
 import ReactFlow, {
     Node,
     Edge,
     Controls,
     Background,
-    useNodesState,
-    useEdgesState,
     Handle,
     Position,
     NodeProps,
@@ -22,8 +20,8 @@ type Project = Database['public']['Tables']['projects']['Row']
 type Task = Database['public']['Tables']['tasks']['Row']
 
 // --- Error Boundary ---
-class MindMapErrorBoundary extends Component<{ children: ReactNode; onError?: () => void }, { hasError: boolean }> {
-    constructor(props: { children: ReactNode; onError?: () => void }) {
+class MindMapErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+    constructor(props: { children: ReactNode }) {
         super(props);
         this.state = { hasError: false };
     }
@@ -34,7 +32,6 @@ class MindMapErrorBoundary extends Component<{ children: ReactNode; onError?: ()
 
     componentDidCatch(error: Error, errorInfo: ErrorInfo) {
         console.error('[MindMap Error Boundary]', error, errorInfo);
-        this.props.onError?.();
     }
 
     render() {
@@ -65,7 +62,6 @@ function createLayoutNodes(project: Project | null, groups: TaskGroup[], tasks: 
     if (!project?.id) return { nodes, edges };
 
     try {
-        // Project node
         nodes.push({
             id: 'project-root',
             type: 'projectNode',
@@ -73,11 +69,9 @@ function createLayoutNodes(project: Project | null, groups: TaskGroup[], tasks: 
             position: { x: 50, y: 200 },
         });
 
-        // Safe groups array
         const safeGroups = (groups ?? []).filter(g => g?.id);
         const groupIds = new Set(safeGroups.map(g => g.id));
 
-        // Group nodes
         safeGroups.forEach((group, index) => {
             nodes.push({
                 id: group.id,
@@ -93,10 +87,7 @@ function createLayoutNodes(project: Project | null, groups: TaskGroup[], tasks: 
             });
         });
 
-        // Safe tasks - only include tasks with valid group_id
         const safeTasks = (tasks ?? []).filter(t => t?.id && t?.group_id && groupIds.has(t.group_id));
-
-        // Group tasks by group_id
         const tasksByGroup: Record<string, Task[]> = {};
         safeTasks.forEach(task => {
             const gid = task.group_id;
@@ -104,17 +95,13 @@ function createLayoutNodes(project: Project | null, groups: TaskGroup[], tasks: 
             tasksByGroup[gid].push(task);
         });
 
-        // Task nodes
         safeGroups.forEach((group, groupIndex) => {
             const groupTasks = tasksByGroup[group.id] ?? [];
             groupTasks.forEach((task, taskIndex) => {
                 nodes.push({
                     id: task.id,
                     type: 'taskNode',
-                    data: {
-                        label: task.title ?? 'Task',
-                        status: task.status ?? 'todo'
-                    },
+                    data: { label: task.title ?? 'Task', status: task.status ?? 'todo' },
                     position: { x: 520, y: 30 + groupIndex * 100 + taskIndex * 50 },
                 });
                 edges.push({
@@ -173,71 +160,80 @@ interface MindMapProps {
 }
 
 function MindMapContent({ project, groups, tasks }: MindMapProps) {
-    const [nodes, setNodes, onNodesChange] = useNodesState([]);
-    const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+    // Use refs to store nodes/edges to avoid state update loops
+    const [nodes, setNodes] = useState<Node[]>([]);
+    const [edges, setEdges] = useState<Edge[]>([]);
 
-    // Debounce layout updates to prevent rapid re-renders from crashing
-    const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-    const lastDataRef = useRef({ project, groups, tasks });
+    // Track the last data hash to prevent unnecessary updates
+    const lastDataHashRef = useRef<string>('');
+    const isUpdatingRef = useRef(false);
 
-    // Memoize the data to prevent unnecessary recalculations
-    const stableData = useMemo(() => {
-        return {
-            projectId: project?.id,
-            groupCount: groups?.length ?? 0,
-            taskCount: tasks?.length ?? 0,
-            groupIds: (groups ?? []).map(g => g?.id).filter(Boolean).join(','),
-            taskIds: (tasks ?? []).map(t => t?.id).filter(Boolean).join(','),
-        };
+    // Create a stable hash of the data to detect real changes
+    const dataHash = useMemo(() => {
+        const groupIds = (groups ?? []).map(g => g?.id).filter(Boolean).sort().join(',');
+        const taskInfo = (tasks ?? []).map(t => `${t?.id}:${t?.status}`).filter(Boolean).sort().join(',');
+        return `${project?.id}|${groupIds}|${taskInfo}`;
     }, [project?.id, groups, tasks]);
 
     useEffect(() => {
-        // Clear any pending update
-        if (updateTimeoutRef.current) {
-            clearTimeout(updateTimeoutRef.current);
+        // Guard: Skip if data hasn't actually changed
+        if (dataHash === lastDataHashRef.current) {
+            return;
         }
 
-        // Update ref immediately
-        lastDataRef.current = { project, groups, tasks };
+        // Guard: Skip if already updating
+        if (isUpdatingRef.current) {
+            return;
+        }
 
-        // Debounce the actual layout update
-        updateTimeoutRef.current = setTimeout(() => {
-            try {
-                const { project: p, groups: g, tasks: t } = lastDataRef.current;
-                if (!p?.id) {
-                    setNodes([]);
-                    setEdges([]);
-                    return;
-                }
+        // Mark as updating
+        isUpdatingRef.current = true;
+        lastDataHashRef.current = dataHash;
 
-                // Use stable arrays to prevent issues
-                const safeGroups = Array.isArray(g) ? g : [];
-                const safeTasks = Array.isArray(t) ? t : [];
-
-                const { nodes: newNodes, edges: newEdges } = createLayoutNodes(p, safeGroups, safeTasks);
-                setNodes(newNodes);
-                setEdges(newEdges);
-            } catch (err) {
-                console.error('[MindMap] Debounced layout error:', err);
+        try {
+            if (!project?.id) {
                 setNodes([]);
                 setEdges([]);
+                isUpdatingRef.current = false;
+                return;
             }
-        }, 100); // 100ms debounce
 
-        return () => {
-            if (updateTimeoutRef.current) {
-                clearTimeout(updateTimeoutRef.current);
-            }
-        };
-    }, [stableData, setNodes, setEdges]);
+            const safeGroups = Array.isArray(groups) ? groups : [];
+            const safeTasks = Array.isArray(tasks) ? tasks : [];
+
+            const { nodes: newNodes, edges: newEdges } = createLayoutNodes(project, safeGroups, safeTasks);
+
+            // Only update if actually different (belt-and-suspenders)
+            setNodes(prev => {
+                const prevIds = prev.map(n => n.id).join(',');
+                const newIds = newNodes.map(n => n.id).join(',');
+                if (prevIds === newIds) return prev;
+                return newNodes;
+            });
+
+            setEdges(prev => {
+                const prevIds = prev.map(e => e.id).join(',');
+                const newIds = newEdges.map(e => e.id).join(',');
+                if (prevIds === newIds) return prev;
+                return newEdges;
+            });
+        } catch (err) {
+            console.error('[MindMap] Layout error:', err);
+            setNodes([]);
+            setEdges([]);
+        } finally {
+            // Reset update flag after a small delay to prevent rapid re-entry
+            setTimeout(() => {
+                isUpdatingRef.current = false;
+            }, 50);
+        }
+    }, [dataHash, project, groups, tasks]); // Removed setNodes/setEdges from deps
 
     return (
         <div className="w-full h-full bg-muted/5">
             <ReactFlow
                 nodes={nodes}
                 edges={edges}
-                onNodesChange={onNodesChange}
-                onEdgesChange={onEdgesChange}
                 nodeTypes={nodeTypes}
                 fitView
                 fitViewOptions={{ padding: 0.2 }}
@@ -248,6 +244,7 @@ function MindMapContent({ project, groups, tasks }: MindMapProps) {
                 zoomOnScroll={true}
                 minZoom={0.5}
                 maxZoom={1.5}
+            // REMOVED: onNodesChange and onEdgesChange to prevent circular updates
             >
                 <Background gap={20} size={1} color="hsl(var(--muted-foreground) / 0.1)" />
                 <Controls showInteractive={false} />
@@ -258,23 +255,17 @@ function MindMapContent({ project, groups, tasks }: MindMapProps) {
 
 export function MindMap(props: MindMapProps) {
     const [mounted, setMounted] = useState(false);
-    const [renderKey, setRenderKey] = useState(0);
 
     useEffect(() => {
         setMounted(true);
     }, []);
-
-    const handleError = () => {
-        // Force re-render with new key on error
-        setRenderKey(k => k + 1);
-    };
 
     if (!mounted) {
         return <div className="w-full h-full bg-muted/5 flex items-center justify-center text-muted-foreground">Loading...</div>;
     }
 
     return (
-        <MindMapErrorBoundary key={renderKey} onError={handleError}>
+        <MindMapErrorBoundary>
             <ReactFlowProvider>
                 <MindMapContent {...props} />
             </ReactFlowProvider>
