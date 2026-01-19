@@ -20,11 +20,14 @@ interface UseMindMapSyncReturn {
     createGroup: (title: string) => Promise<TaskGroup | null>
     updateGroupTitle: (groupId: string, newTitle: string) => Promise<void>
     deleteGroup: (groupId: string) => Promise<void>
-    createTask: (groupId: string, title?: string) => Promise<Task | null>
+    createTask: (groupId: string, title?: string, parentTaskId?: string | null) => Promise<Task | null>
     updateTask: (taskId: string, updates: Partial<Task>) => Promise<void>
     deleteTask: (taskId: string) => Promise<void>
     moveTask: (taskId: string, newGroupId: string) => Promise<void>
     isLoading: boolean
+    // Helper functions for parent-child relationships
+    getChildTasks: (parentTaskId: string) => Task[]
+    getParentTasks: (groupId: string) => Task[]
 }
 
 export function useMindMapSync({
@@ -94,17 +97,19 @@ export function useMindMapSync({
     }, [supabase])
 
     // --- Task Operations ---
-    const createTask = useCallback(async (groupId: string, title: string = "New Task") => {
+    const createTask = useCallback(async (groupId: string, title: string = "New Task", parentTaskId: string | null = null) => {
         try {
             const groupTasks = tasks.filter(t => t.group_id === groupId)
-            const maxPriority = groupTasks.length > 0 ? Math.max(...groupTasks.map(t => t.priority)) + 1 : 0
+            const maxOrder = groupTasks.length > 0 ? Math.max(...groupTasks.map(t => t.order_index ?? 0)) + 1 : 0
 
             const { data, error } = await supabase.from('tasks').insert({
                 user_id: userId,
                 group_id: groupId,
+                parent_task_id: parentTaskId,
                 title,
-                status: 'pending',
-                priority: maxPriority,
+                status: 'todo',
+                priority: 3,
+                order_index: maxOrder,
                 actual_time_minutes: 0,
                 estimated_time: 0
             }).select().single()
@@ -145,6 +150,15 @@ export function useMindMapSync({
         }
     }, [supabase])
 
+    // --- Helper Functions for Parent-Child Relationships ---
+    const getChildTasks = useCallback((parentTaskId: string): Task[] => {
+        return tasks.filter(t => t.parent_task_id === parentTaskId).sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0))
+    }, [tasks])
+
+    const getParentTasks = useCallback((groupId: string): Task[] => {
+        return tasks.filter(t => t.group_id === groupId && !t.parent_task_id).sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0))
+    }, [tasks])
+
     return {
         groups,
         tasks,
@@ -155,6 +169,8 @@ export function useMindMapSync({
         updateTask,
         deleteTask,
         moveTask,
-        isLoading
+        isLoading,
+        getChildTasks,
+        getParentTasks
     }
 }
