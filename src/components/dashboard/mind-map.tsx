@@ -11,7 +11,6 @@ import ReactFlow, {
     Position,
     NodeProps,
     ReactFlowProvider,
-    useReactFlow,
     NodeMouseHandler,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
@@ -81,42 +80,67 @@ const GroupNode = React.memo(({ data, selected }: NodeProps) => (
 ));
 GroupNode.displayName = 'GroupNode';
 
-// Editable Task Node
+// EDITABLE Task Node with proper nodrag and local state
 const TaskNode = React.memo(({ data, selected }: NodeProps) => {
     const inputRef = useRef<HTMLInputElement>(null);
-    const [isEditing, setIsEditing] = useState(data?.isEditing ?? false);
-    const [editValue, setEditValue] = useState(data?.label ?? 'Task');
 
-    // Auto-focus when entering edit mode
+    // Local editing state - starts as true if flagged for immediate editing
+    const [isEditing, setIsEditing] = useState<boolean>(data?.startEditing ?? false);
+    const [editValue, setEditValue] = useState<string>(data?.label ?? '');
+
+    // Sync edit value when label changes externally
     useEffect(() => {
-        if (data?.isEditing && inputRef.current) {
+        if (!isEditing) {
+            setEditValue(data?.label ?? '');
+        }
+    }, [data?.label, isEditing]);
+
+    // Auto-focus when startEditing flag is set from parent
+    useEffect(() => {
+        if (data?.startEditing && !isEditing) {
+            setIsEditing(true);
+            setEditValue(data?.label ?? '');
+        }
+    }, [data?.startEditing, isEditing, data?.label]);
+
+    // Focus input when entering edit mode
+    useEffect(() => {
+        if (isEditing && inputRef.current) {
             inputRef.current.focus();
             inputRef.current.select();
-            setIsEditing(true);
-            setEditValue(data?.label ?? 'Task');
         }
-    }, [data?.isEditing, data?.label]);
+    }, [isEditing]);
 
+    // Handle click on text to enter edit mode
+    const handleTextClick = useCallback((e: React.MouseEvent) => {
+        e.stopPropagation(); // Prevent node selection event
+        setIsEditing(true);
+    }, []);
+
+    // Handle blur - save and exit edit mode
     const handleBlur = useCallback(() => {
         setIsEditing(false);
-        if (editValue !== data?.label && data?.onSave) {
-            data.onSave(editValue);
+        const trimmedValue = editValue.trim();
+        if (trimmedValue && trimmedValue !== data?.label && data?.onSave) {
+            data.onSave(trimmedValue);
         }
+        // Notify parent that editing ended
         if (data?.onEditEnd) {
             data.onEditEnd();
         }
     }, [editValue, data]);
 
-    const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-        // Stop propagation to prevent MindMap shortcuts
-        e.stopPropagation();
+    // Handle keyboard events in input
+    const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+        e.stopPropagation(); // CRITICAL: Prevent parent shortcuts from firing
 
         if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
             e.preventDefault();
-            inputRef.current?.blur();
+            inputRef.current?.blur(); // This triggers handleBlur
         }
         if (e.key === 'Escape') {
-            setEditValue(data?.label ?? 'Task');
+            e.preventDefault();
+            setEditValue(data?.label ?? ''); // Reset to original
             setIsEditing(false);
             if (data?.onEditEnd) {
                 data.onEditEnd();
@@ -124,14 +148,10 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
         }
     }, [data]);
 
-    const handleDoubleClick = useCallback(() => {
-        setIsEditing(true);
-        setEditValue(data?.label ?? 'Task');
-        setTimeout(() => {
-            inputRef.current?.focus();
-            inputRef.current?.select();
-        }, 0);
-    }, [data?.label]);
+    // Prevent input click from bubbling
+    const handleInputClick = useCallback((e: React.MouseEvent) => {
+        e.stopPropagation();
+    }, []);
 
     return (
         <div
@@ -139,12 +159,17 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
                 "w-[140px] px-2 py-1.5 rounded bg-background border text-xs shadow-sm flex items-center gap-1 transition-all",
                 selected && "ring-2 ring-primary ring-offset-1 ring-offset-background border-primary"
             )}
-            onDoubleClick={handleDoubleClick}
         >
             <Handle type="target" position={Position.Left} className="!bg-muted-foreground/50 !w-1 !h-1" />
-            <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", data?.status === 'done' ? "bg-primary" : "bg-muted-foreground/30")} />
 
-            {isEditing || data?.isEditing ? (
+            {/* Status indicator */}
+            <div className={cn(
+                "w-1.5 h-1.5 rounded-full shrink-0",
+                data?.status === 'done' ? "bg-primary" : "bg-muted-foreground/30"
+            )} />
+
+            {/* Text or Input */}
+            {isEditing ? (
                 <input
                     ref={inputRef}
                     type="text"
@@ -152,11 +177,18 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
                     onChange={(e) => setEditValue(e.target.value)}
                     onBlur={handleBlur}
                     onKeyDown={handleKeyDown}
-                    className="flex-1 bg-transparent border-none text-xs focus:outline-none focus:ring-0 px-0 min-w-0"
+                    onClick={handleInputClick}
+                    className="nodrag flex-1 bg-transparent border-none text-xs focus:outline-none focus:ring-0 px-0.5 min-w-0"
                     autoFocus
                 />
             ) : (
-                <span className={cn("truncate", data?.status === 'done' && "line-through text-muted-foreground")}>
+                <span
+                    className={cn(
+                        "flex-1 truncate cursor-text px-0.5",
+                        data?.status === 'done' && "line-through text-muted-foreground"
+                    )}
+                    onClick={handleTextClick}
+                >
                     {data?.label ?? 'Task'}
                 </span>
             )}
@@ -224,13 +256,12 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onUpdateTask, on
         }
     }, [onUpdateTask]);
 
-    // Handle edit end
+    // Handle edit end - refocus container for shortcuts
     const handleEditEnd = useCallback(() => {
         setEditingNodeId(null);
-        // Re-focus container for keyboard shortcuts
         setTimeout(() => {
             containerRef.current?.focus();
-        }, 0);
+        }, 10);
     }, []);
 
     // DERIVED STATE: nodes and edges
@@ -309,13 +340,15 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onUpdateTask, on
                 let taskYOffset = groupY - 20;
 
                 groupParentTasks.forEach((task) => {
+                    const isThisEditing = editingNodeId === task.id;
+
                     resultNodes.push({
                         id: task.id,
                         type: 'taskNode',
                         data: {
                             label: task.title ?? 'Task',
                             status: task.status ?? 'todo',
-                            isEditing: editingNodeId === task.id,
+                            startEditing: isThisEditing,
                             onSave: (newTitle: string) => handleSaveTaskTitle(task.id, newTitle),
                             onEditEnd: handleEditEnd,
                         },
@@ -333,13 +366,15 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onUpdateTask, on
 
                     const children = childTasksByParent[task.id] ?? [];
                     children.forEach((child) => {
+                        const isChildEditing = editingNodeId === child.id;
+
                         resultNodes.push({
                             id: child.id,
                             type: 'taskNode',
                             data: {
                                 label: child.title ?? 'Subtask',
                                 status: child.status ?? 'todo',
-                                isEditing: editingNodeId === child.id,
+                                startEditing: isChildEditing,
                                 onSave: (newTitle: string) => handleSaveTaskTitle(child.id, newTitle),
                                 onEditEnd: handleEditEnd,
                             },
@@ -367,6 +402,7 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onUpdateTask, on
 
     // Handle node click to select
     const handleNodeClick: NodeMouseHandler = useCallback((event, node) => {
+        // Only select, don't enter edit mode (clicking text enters edit mode)
         setSelectedNodeId(node.id);
     }, []);
 
@@ -378,7 +414,7 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onUpdateTask, on
 
     // KEYBOARD SHORTCUTS
     const handleKeyDown = useCallback(async (event: React.KeyboardEvent) => {
-        // Skip if currently editing
+        // Skip if currently editing (input will handle its own events)
         if (editingNodeId) return;
 
         // Skip if focus is on input/textarea
@@ -407,7 +443,7 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onUpdateTask, on
                     const newTask = await onCreateTask(selectedGroup.id, "New Subtask", selectedNodeId);
                     if (newTask) {
                         setSelectedNodeId(newTask.id);
-                        setEditingNodeId(newTask.id); // Auto-edit mode
+                        setEditingNodeId(newTask.id);
                     }
                 }
                 break;
@@ -429,14 +465,13 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onUpdateTask, on
                     );
                     if (newTask) {
                         setSelectedNodeId(newTask.id);
-                        setEditingNodeId(newTask.id); // Auto-edit mode
+                        setEditingNodeId(newTask.id);
                     }
                 }
                 break;
             }
 
             case 'F2': {
-                // F2 to edit selected node
                 event.preventDefault();
                 if (!isGroupNode && selectedNodeId) {
                     setEditingNodeId(selectedNodeId);
@@ -474,7 +509,7 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onUpdateTask, on
     return (
         <div
             ref={containerRef}
-            className="w-full h-full bg-muted/5 relative"
+            className="w-full h-full bg-muted/5 relative outline-none"
             tabIndex={0}
             onKeyDown={handleKeyDown}
         >
