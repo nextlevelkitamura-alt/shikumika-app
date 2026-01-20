@@ -104,15 +104,19 @@ export interface Database {
                     id: string
                     user_id: string
                     group_id: string
-                    parent_task_id: string | null  // NEW: For hierarchical tasks
+                    parent_task_id: string | null
                     title: string
                     status: string
                     priority: number
-                    order_index: number  // NEW: For sorting
+                    order_index: number
                     scheduled_at: string | null
                     estimated_time: number
                     actual_time_minutes: number
                     google_event_id: string | null
+                    // Timer columns
+                    total_elapsed_seconds: number
+                    last_started_at: string | null
+                    is_timer_running: boolean
                     created_at: string
                 }
                 Insert: {
@@ -128,6 +132,10 @@ export interface Database {
                     estimated_time?: number
                     actual_time_minutes?: number
                     google_event_id?: string | null
+                    // Timer columns
+                    total_elapsed_seconds?: number
+                    last_started_at?: string | null
+                    is_timer_running?: boolean
                     created_at?: string
                 }
                 Update: {
@@ -143,6 +151,10 @@ export interface Database {
                     estimated_time?: number
                     actual_time_minutes?: number
                     google_event_id?: string | null
+                    // Timer columns
+                    total_elapsed_seconds?: number
+                    last_started_at?: string | null
+                    is_timer_running?: boolean
                     created_at?: string
                 }
             }

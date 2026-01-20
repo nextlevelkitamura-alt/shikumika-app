@@ -6,6 +6,7 @@ import { CenterPane } from "@/components/dashboard/center-pane"
 import { RightSidebar } from "@/components/dashboard/right-sidebar"
 import { Database } from "@/types/database"
 import { useMindMapSync } from "@/hooks/useMindMapSync"
+import { TimerProvider } from "@/contexts/TimerContext"
 
 type Goal = Database['public']['Tables']['goals']['Row']
 type Project = Database['public']['Tables']['projects']['Row']
@@ -107,39 +108,41 @@ export function DashboardClient({
     }, [deleteGroup])
 
     return (
-        <div className="flex h-full w-full">
-            {/* Pane 1: Left Sidebar */}
-            <div className="hidden md:block w-[250px] lg:w-[300px] flex-none overflow-hidden h-full">
-                <LeftSidebar
-                    goals={goals}
-                    selectedGoalId={selectedGoalId}
-                    onSelectGoal={setSelectedGoalId}
-                    projects={filteredProjects}
-                    selectedProjectId={selectedProjectId}
-                    onSelectProject={setSelectedProjectId}
-                />
-            </div>
+        <TimerProvider tasks={currentTasks} onUpdateTask={updateTask}>
+            <div className="flex h-full w-full">
+                {/* Pane 1: Left Sidebar */}
+                <div className="hidden md:block w-[250px] lg:w-[300px] flex-none overflow-hidden h-full">
+                    <LeftSidebar
+                        goals={goals}
+                        selectedGoalId={selectedGoalId}
+                        onSelectGoal={setSelectedGoalId}
+                        projects={filteredProjects}
+                        selectedProjectId={selectedProjectId}
+                        onSelectProject={setSelectedProjectId}
+                    />
+                </div>
 
-            {/* Pane 2: Center (MindMap + Lists) */}
-            <div className="flex-1 min-w-0 overflow-hidden border-r border-l h-full">
-                <CenterPane
-                    project={selectedProject}
-                    groups={currentGroups}
-                    tasks={currentTasks}
-                    onUpdateGroupTitle={handleUpdateGroupTitle}
-                    onCreateGroup={handleCreateGroup}
-                    onDeleteGroup={handleDeleteGroup}
-                    onCreateTask={createTask}
-                    onUpdateTask={updateTask}
-                    onDeleteTask={deleteTask}
-                    onMoveTask={moveTask}
-                />
-            </div>
+                {/* Pane 2: Center (MindMap + Lists) */}
+                <div className="flex-1 min-w-0 overflow-hidden border-r border-l h-full">
+                    <CenterPane
+                        project={selectedProject}
+                        groups={currentGroups}
+                        tasks={currentTasks}
+                        onUpdateGroupTitle={handleUpdateGroupTitle}
+                        onCreateGroup={handleCreateGroup}
+                        onDeleteGroup={handleDeleteGroup}
+                        onCreateTask={createTask}
+                        onUpdateTask={updateTask}
+                        onDeleteTask={deleteTask}
+                        onMoveTask={moveTask}
+                    />
+                </div>
 
-            {/* Pane 3: Right Sidebar (Calendar) */}
-            <div className="hidden lg:block w-[300px] flex-none overflow-hidden h-full">
-                <RightSidebar />
+                {/* Pane 3: Right Sidebar (Calendar) */}
+                <div className="hidden lg:block w-[300px] flex-none overflow-hidden h-full">
+                    <RightSidebar />
+                </div>
             </div>
-        </div>
+        </TimerProvider>
     )
 }

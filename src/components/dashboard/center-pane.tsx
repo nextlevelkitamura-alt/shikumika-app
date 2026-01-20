@@ -4,10 +4,11 @@ import { useState, useRef, useEffect, useCallback } from "react"
 import { Database } from "@/types/database"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
-import { MoreHorizontal, Play, Check, ChevronRight, ChevronDown, Plus, Trash2 } from "lucide-react"
+import { MoreHorizontal, Play, Check, ChevronRight, ChevronDown, Plus, Trash2, Pause, RotateCcw, Timer } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import { MindMap } from "./mind-map"
+import { useTimer, formatTime } from "@/contexts/TimerContext"
 
 type Project = Database['public']['Tables']['projects']['Row']
 type TaskGroup = Database['public']['Tables']['task_groups']['Row']
@@ -84,6 +85,15 @@ function TaskItem({
         }
     }
 
+    // Timer hook
+    const { runningTaskId, currentElapsedSeconds, startTimer, pauseTimer, completeTimer, interruptTimer, isLoading } = useTimer();
+    const isTimerRunning = runningTaskId === task.id;
+
+    // Calculate elapsed time for this task
+    const taskElapsedSeconds = isTimerRunning
+        ? currentElapsedSeconds
+        : (task.total_elapsed_seconds ?? 0);
+
 
     return (
         <div className="w-full">
@@ -145,6 +155,68 @@ function TaskItem({
                     <MiniProgress value={completedChildren} total={childTasks.length} />
                 )}
 
+                {/* Timer Controls */}
+                <div className="flex items-center gap-1">
+                    {/* Time Display */}
+                    {(taskElapsedSeconds > 0 || isTimerRunning) && (
+                        <span className={cn(
+                            "text-xs font-mono tabular-nums px-1.5 py-0.5 rounded",
+                            isTimerRunning ? "bg-primary/10 text-primary" : "text-muted-foreground"
+                        )}>
+                            <Timer className="inline w-3 h-3 mr-1" />
+                            {formatTime(taskElapsedSeconds)}
+                        </span>
+                    )}
+
+                    {isTimerRunning ? (
+                        /* Running State: Pause / Complete / Interrupt */
+                        <>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 text-amber-500 hover:bg-amber-500/10"
+                                onClick={() => pauseTimer()}
+                                disabled={isLoading}
+                                title="一時停止"
+                            >
+                                <Pause className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 text-green-500 hover:bg-green-500/10"
+                                onClick={() => completeTimer()}
+                                disabled={isLoading}
+                                title="完了"
+                            >
+                                <Check className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 text-muted-foreground hover:bg-muted/50"
+                                onClick={() => interruptTimer()}
+                                disabled={isLoading}
+                                title="中断・戻る"
+                            >
+                                <RotateCcw className="w-3.5 h-3.5" />
+                            </Button>
+                        </>
+                    ) : (
+                        /* Stopped State: Play button (visible on hover) */
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-6 text-[10px] gap-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-primary hover:text-primary-foreground"
+                            onClick={() => startTimer(task)}
+                            disabled={isLoading || task.status === 'done'}
+                        >
+                            <Play className="w-2.5 h-2.5" />
+                            フォーカス
+                        </Button>
+                    )}
+                </div>
+
                 {/* Actions (Hover) */}
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     {canAddChildren && (
@@ -158,15 +230,6 @@ function TaskItem({
                             <Plus className="w-3 h-3" />
                         </Button>
                     )}
-
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-6 text-[10px] gap-1 hover:bg-primary hover:text-primary-foreground"
-                    >
-                        <Play className="w-2.5 h-2.5" />
-                        フォーカス
-                    </Button>
 
                     {/* Direct Delete Button */}
                     <Button

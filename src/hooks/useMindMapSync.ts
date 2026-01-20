@@ -120,6 +120,10 @@ export function useMindMapSync({
             estimated_time: 0,
             actual_time_minutes: 0,
             google_event_id: null,
+            // Timer fields
+            total_elapsed_seconds: 0,
+            last_started_at: null,
+            is_timer_running: false,
             created_at: now,
         };
 
