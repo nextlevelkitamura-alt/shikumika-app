@@ -339,7 +339,12 @@ export function CenterPane({
                                                             </Button>
                                                         </DropdownMenuTrigger>
                                                         <DropdownMenuContent align="end">
-                                                            <DropdownMenuItem onClick={() => handleAddTask(group.id)}>
+                                                            <DropdownMenuItem
+                                                                onSelect={(e) => {
+                                                                    e.preventDefault(); // Keep dropdown open
+                                                                    handleAddTask(group.id);
+                                                                }}
+                                                            >
                                                                 <Plus className="w-3 h-3 mr-2" />
                                                                 タスク追加
                                                             </DropdownMenuItem>
