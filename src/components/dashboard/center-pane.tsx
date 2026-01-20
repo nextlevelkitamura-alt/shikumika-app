@@ -120,13 +120,18 @@ function TaskItem({
                     )}
                     defaultValue={task.title}
                     onBlur={(e) => {
-                        if (e.target.value !== task.title) {
-                            onUpdateTask?.(task.id, { title: e.target.value })
+                        const newValue = e.target.value;
+                        if (newValue !== task.title) {
+                            onUpdateTask?.(task.id, { title: newValue })
                         }
                     }}
                     onKeyDown={(e) => {
+                        // Skip if IME is composing (Japanese/Chinese input)
+                        if (e.nativeEvent.isComposing) return;
+
                         if (e.key === 'Enter') {
-                            e.currentTarget.blur()
+                            e.preventDefault();
+                            e.currentTarget.blur();
                         }
                     }}
                 />
