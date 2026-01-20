@@ -39,11 +39,11 @@ function MiniProgress({ value, total }: { value: number, total: number }) {
     )
 }
 
-// Task Item Component (Recursive for parent-child)
+// Task Item Component (Recursive for parent-child, supports up to 6 levels)
 function TaskItem({
     task,
     allTasks,
-    isChild = false,
+    depth = 0,
     onUpdateTask,
     onDeleteTask,
     onCreateTask,
@@ -51,13 +51,17 @@ function TaskItem({
 }: {
     task: Task
     allTasks: Task[]
-    isChild?: boolean
+    depth?: number
     onUpdateTask?: (taskId: string, updates: Partial<Task>) => Promise<void>
     onDeleteTask?: (taskId: string) => Promise<void>
     onCreateTask?: (groupId: string, title?: string, parentTaskId?: string | null) => Promise<Task | null>
     groupId: string
 }) {
     const [isExpanded, setIsExpanded] = useState(true)
+
+    // Max depth limit (6 levels)
+    const MAX_DEPTH = 6;
+    const canAddChildren = depth < MAX_DEPTH - 1;
 
     // Safety: Return null if task is invalid
     if (!task || !task.id) {
@@ -83,10 +87,10 @@ function TaskItem({
 
     return (
         <div className="w-full">
-            <div className={cn(
-                "group flex items-center gap-2 p-2 hover:bg-muted/10 transition-colors",
-                isChild ? "pl-10" : "pl-4"
-            )}>
+            <div
+                className="group flex items-center gap-2 p-2 hover:bg-muted/10 transition-colors"
+                style={{ paddingLeft: `calc(${depth * 1.5}rem + 1rem)` }}
+            >
                 {/* Expand/Collapse for parent tasks */}
                 {hasChildren ? (
                     <Button
@@ -143,7 +147,7 @@ function TaskItem({
 
                 {/* Actions (Hover) */}
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    {!isChild && (
+                    {canAddChildren && (
                         <Button
                             variant="ghost"
                             size="icon"
@@ -177,15 +181,15 @@ function TaskItem({
                 </div>
             </div>
 
-            {/* Child Tasks */}
+            {/* Child Tasks (Recursive) */}
             {hasChildren && isExpanded && (
-                <div className="border-l ml-6 border-muted">
+                <div className="border-l border-muted" style={{ marginLeft: `calc(${depth * 1.5}rem + 1.5rem)` }}>
                     {childTasks.map(child => (
                         <TaskItem
                             key={child.id}
                             task={child}
                             allTasks={allTasks}
-                            isChild={true}
+                            depth={depth + 1}
                             onUpdateTask={onUpdateTask}
                             onDeleteTask={onDeleteTask}
                             onCreateTask={onCreateTask}

@@ -409,11 +409,9 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onUpdateTask, on
             const groupIdSet = new Set(safeGroups.map(g => g.id));
             const safeTasks = parsedTasks.filter(t => t?.id && t?.group_id && groupIdSet.has(t.group_id));
 
-            const parentTasks = safeTasks.filter(t => !t.parent_task_id).sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0));
-            const childTasks = safeTasks.filter(t => t.parent_task_id);
-
+            // Build child tasks map
             const childTasksByParent: Record<string, typeof safeTasks> = {};
-            for (const task of childTasks) {
+            for (const task of safeTasks) {
                 if (task.parent_task_id) {
                     if (!childTasksByParent[task.parent_task_id]) childTasksByParent[task.parent_task_id] = [];
                     childTasksByParent[task.parent_task_id].push(task);
@@ -423,11 +421,62 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onUpdateTask, on
                 childTasksByParent[key].sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0));
             }
 
-            const parentTasksByGroup: Record<string, typeof safeTasks> = {};
-            for (const task of parentTasks) {
-                if (!parentTasksByGroup[task.group_id]) parentTasksByGroup[task.group_id] = [];
-                parentTasksByGroup[task.group_id].push(task);
+            // Root tasks (no parent)
+            const rootTasks = safeTasks.filter(t => !t.parent_task_id).sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0));
+
+            const rootTasksByGroup: Record<string, typeof safeTasks> = {};
+            for (const task of rootTasks) {
+                if (!rootTasksByGroup[task.group_id]) rootTasksByGroup[task.group_id] = [];
+                rootTasksByGroup[task.group_id].push(task);
             }
+
+            // Recursive function to render tasks (max 6 levels)
+            const MAX_DEPTH = 6;
+            const BASE_X = 520;
+            const X_STEP = 180;
+
+            const renderTasksRecursively = (
+                task: typeof safeTasks[0],
+                parentId: string,
+                depth: number,
+                yOffsetRef: { current: number }
+            ) => {
+                if (depth >= MAX_DEPTH) return;
+
+                const triggerEdit = shouldTriggerEdit(task.id);
+                const xPos = BASE_X + (depth * X_STEP);
+
+                resultNodes.push({
+                    id: task.id,
+                    type: 'taskNode',
+                    data: {
+                        label: task.title ?? 'Task',
+                        status: task.status ?? 'todo',
+                        triggerEdit,
+                        initialValue: '',
+                        onSave: (t: string) => saveTaskTitle(task.id, t),
+                        onAddChild: () => addChildTask(task.id),
+                        onAddSibling: () => addSiblingTask(task.id),
+                        onDelete: () => deleteTask(task.id),
+                    },
+                    position: { x: xPos, y: yOffsetRef.current },
+                    selected: selectedNodeId === task.id,
+                });
+                resultEdges.push({
+                    id: `e-${parentId}-${task.id}`,
+                    source: parentId,
+                    target: task.id,
+                    type: 'smoothstep'
+                });
+
+                yOffsetRef.current += 40;
+
+                // Render children recursively
+                const children = childTasksByParent[task.id] ?? [];
+                for (const child of children) {
+                    renderTasksRecursively(child, task.id, depth + 1, yOffsetRef);
+                }
+            };
 
             let globalYOffset = 50;
 
@@ -443,56 +492,14 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onUpdateTask, on
                 });
                 resultEdges.push({ id: `e-proj-${group.id}`, source: 'project-root', target: group.id, type: 'smoothstep' });
 
-                const groupParentTasks = parentTasksByGroup[group.id] ?? [];
-                let taskYOffset = groupY - 20;
+                const groupRootTasks = rootTasksByGroup[group.id] ?? [];
+                const yOffsetRef = { current: groupY - 20 };
 
-                groupParentTasks.forEach((task) => {
-                    const triggerEdit = shouldTriggerEdit(task.id);
+                for (const task of groupRootTasks) {
+                    renderTasksRecursively(task, group.id, 0, yOffsetRef);
+                }
 
-                    resultNodes.push({
-                        id: task.id,
-                        type: 'taskNode',
-                        data: {
-                            label: task.title ?? 'Task',
-                            status: task.status ?? 'todo',
-                            triggerEdit,
-                            initialValue: '',
-                            onSave: (t: string) => saveTaskTitle(task.id, t),
-                            onAddChild: () => addChildTask(task.id),
-                            onAddSibling: () => addSiblingTask(task.id),
-                            onDelete: () => deleteTask(task.id),
-                        },
-                        position: { x: 520, y: taskYOffset },
-                        selected: selectedNodeId === task.id,
-                    });
-                    resultEdges.push({ id: `e-group-${task.id}`, source: group.id, target: task.id, type: 'smoothstep' });
-                    taskYOffset += 45;
-
-                    (childTasksByParent[task.id] ?? []).forEach((child) => {
-                        const triggerChildEdit = shouldTriggerEdit(child.id);
-
-                        resultNodes.push({
-                            id: child.id,
-                            type: 'taskNode',
-                            data: {
-                                label: child.title ?? 'Subtask',
-                                status: child.status ?? 'todo',
-                                triggerEdit: triggerChildEdit,
-                                initialValue: '',
-                                onSave: (t: string) => saveTaskTitle(child.id, t),
-                                onAddChild: () => addChildTask(child.id),
-                                onAddSibling: () => addSiblingTask(child.id),
-                                onDelete: () => deleteTask(child.id),
-                            },
-                            position: { x: 720, y: taskYOffset },
-                            selected: selectedNodeId === child.id,
-                        });
-                        resultEdges.push({ id: `e-parent-${child.id}`, source: task.id, target: child.id, type: 'smoothstep' });
-                        taskYOffset += 40;
-                    });
-                });
-
-                globalYOffset = Math.max(globalYOffset + 80, taskYOffset + 30);
+                globalYOffset = Math.max(globalYOffset + 80, yOffsetRef.current + 30);
             });
         } catch (err) {
             console.error('[MindMap] Error:', err);
