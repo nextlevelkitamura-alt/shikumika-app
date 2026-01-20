@@ -384,15 +384,13 @@ export function CenterPane({
                                             ))}
 
                                             {/* Add Task Button */}
-                                            <div className="p-2 pl-4">
-                                                <button
-                                                    className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-2 transition-colors"
-                                                    onClick={() => handleAddTask(group.id)}
-                                                >
-                                                    <Plus className="w-3 h-3" />
-                                                    タスクを追加...
-                                                </button>
-                                            </div>
+                                            <button
+                                                className="w-full p-3 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/20 flex items-center justify-center gap-2 transition-colors"
+                                                onClick={() => handleAddTask(group.id)}
+                                            >
+                                                <Plus className="w-3 h-3" />
+                                                タスクを追加...
+                                            </button>
                                         </div>
                                     )}
                                 </div>
