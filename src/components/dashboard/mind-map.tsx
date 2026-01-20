@@ -718,8 +718,30 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
             if (onCreateGroup) {
                 onCreateGroup("New Group");
             }
+        } else if (event.key === 'Delete' || event.key === 'Backspace') {
+            // Delete group with Delete/Backspace
+            event.preventDefault();
+            if (onDeleteGroup) {
+                // Find next/prev group for focus after deletion
+                const groupIndex = groups.findIndex(g => g.id === selectedNodeId);
+                let nextFocusId: string | null = null;
+
+                if (groupIndex < groups.length - 1) {
+                    // Focus next sibling
+                    nextFocusId = groups[groupIndex + 1].id;
+                } else if (groupIndex > 0) {
+                    // Focus previous sibling
+                    nextFocusId = groups[groupIndex - 1].id;
+                } else {
+                    // No siblings, focus project root
+                    nextFocusId = 'project-root';
+                }
+
+                await onDeleteGroup(selectedNodeId);
+                setSelectedNodeId(nextFocusId);
+            }
         }
-    }, [selectedNodeId, groups, onCreateTask, onCreateGroup]);
+    }, [selectedNodeId, groups, onCreateTask, onCreateGroup, onDeleteGroup]);
 
     return (
         <div className="w-full h-full bg-muted/5 relative outline-none" tabIndex={0} onKeyDown={handleContainerKeyDown}>
