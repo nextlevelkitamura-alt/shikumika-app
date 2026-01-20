@@ -334,7 +334,11 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onUpdateTask, on
     const isCreatingNodeRef = useRef(false);
     const prevTaskCountRef = useRef(tasks.length);
 
-    // EFFECT: Detect new task and focus it
+    // REF: Focus queue - persists through dagre re-layouts
+    const focusQueueRef = useRef<string | null>(null);
+    const focusAttemptRef = useRef(0);
+
+    // EFFECT: Detect new task and queue focus
     useEffect(() => {
         const currentCount = tasks.length;
         const prevCount = prevTaskCountRef.current;
@@ -350,7 +354,10 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onUpdateTask, on
             }, null as Task | null);
 
             if (newestTask) {
-                console.log('[MindMap] New task detected, focusing:', newestTask.id);
+                console.log('[MindMap] New task detected, queuing focus:', newestTask.id);
+                // Queue for focus - this persists through dagre re-layout
+                focusQueueRef.current = newestTask.id;
+                focusAttemptRef.current = 0;
                 setSelectedNodeId(newestTask.id);
                 setPendingEditNodeId(newestTask.id);
             }
@@ -363,12 +370,30 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onUpdateTask, on
         prevTaskCountRef.current = currentCount;
     }, [tasks]);
 
-    // Clear pending edit after a short delay (so the node can pick it up)
+    // EFFECT: Restore focus after dagre layout (triggered by pendingEditNodeId)
+    useEffect(() => {
+        if (pendingEditNodeId && focusQueueRef.current) {
+            // Wait for dagre layout to complete, then trigger focus
+            const timer = setTimeout(() => {
+                // Re-set pendingEditNodeId to trigger TaskNode's triggerEdit
+                if (focusQueueRef.current && focusAttemptRef.current < 3) {
+                    focusAttemptRef.current++;
+                    setPendingEditNodeId(focusQueueRef.current);
+                }
+            }, 50);
+
+            return () => clearTimeout(timer);
+        }
+    }, [pendingEditNodeId]);
+
+    // EFFECT: Clear focus queue after successful focus (longer timeout)
     useEffect(() => {
         if (pendingEditNodeId) {
             const timer = setTimeout(() => {
+                focusQueueRef.current = null;
+                focusAttemptRef.current = 0;
                 setPendingEditNodeId(null);
-            }, 200);
+            }, 500);
             return () => clearTimeout(timer);
         }
     }, [pendingEditNodeId]);
