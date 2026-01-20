@@ -14,12 +14,73 @@ import ReactFlow, {
     NodeMouseHandler,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
+import dagre from 'dagre';
 import { Database } from "@/types/database";
 import { cn } from "@/lib/utils";
 
 type TaskGroup = Database['public']['Tables']['task_groups']['Row']
 type Project = Database['public']['Tables']['projects']['Row']
 type Task = Database['public']['Tables']['tasks']['Row']
+
+// --- Dagre Layout Function ---
+const dagreGraph = new dagre.graphlib.Graph();
+dagreGraph.setDefaultEdgeLabel(() => ({}));
+
+const NODE_WIDTH = 150;
+const NODE_HEIGHT = 40;
+const PROJECT_NODE_WIDTH = 200;
+const PROJECT_NODE_HEIGHT = 60;
+const GROUP_NODE_WIDTH = 160;
+const GROUP_NODE_HEIGHT = 50;
+
+function getLayoutedElements(nodes: Node[], edges: Edge[]): { nodes: Node[], edges: Edge[] } {
+    dagreGraph.setGraph({ rankdir: 'LR', nodesep: 50, ranksep: 200 });
+
+    nodes.forEach((node) => {
+        let width = NODE_WIDTH;
+        let height = NODE_HEIGHT;
+
+        if (node.type === 'projectNode') {
+            width = PROJECT_NODE_WIDTH;
+            height = PROJECT_NODE_HEIGHT;
+        } else if (node.type === 'groupNode') {
+            width = GROUP_NODE_WIDTH;
+            height = GROUP_NODE_HEIGHT;
+        }
+
+        dagreGraph.setNode(node.id, { width, height });
+    });
+
+    edges.forEach((edge) => {
+        dagreGraph.setEdge(edge.source, edge.target);
+    });
+
+    dagre.layout(dagreGraph);
+
+    const layoutedNodes = nodes.map((node) => {
+        const nodeWithPosition = dagreGraph.node(node.id);
+        let width = NODE_WIDTH;
+        let height = NODE_HEIGHT;
+
+        if (node.type === 'projectNode') {
+            width = PROJECT_NODE_WIDTH;
+            height = PROJECT_NODE_HEIGHT;
+        } else if (node.type === 'groupNode') {
+            width = GROUP_NODE_WIDTH;
+            height = GROUP_NODE_HEIGHT;
+        }
+
+        return {
+            ...node,
+            position: {
+                x: nodeWithPosition.x - width / 2,
+                y: nodeWithPosition.y - height / 2,
+            },
+        };
+    });
+
+    return { nodes: layoutedNodes, edges };
+}
 
 // --- Error Boundary ---
 class MindMapErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
@@ -505,7 +566,8 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onUpdateTask, on
             console.error('[MindMap] Error:', err);
         }
 
-        return { nodes: resultNodes, edges: resultEdges };
+        // Apply dagre layout to get optimal positions
+        return getLayoutedElements(resultNodes, resultEdges);
     }, [projectId, groupsJson, tasksJson, project?.title, selectedNodeId, shouldTriggerEdit, saveTaskTitle, addChildTask, addSiblingTask, deleteTask]);
 
     const handleNodeClick: NodeMouseHandler = useCallback((_, node) => setSelectedNodeId(node.id), []);
