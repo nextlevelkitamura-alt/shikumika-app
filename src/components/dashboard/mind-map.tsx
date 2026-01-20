@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useMemo, useState, useEffect, Component, ErrorInfo, ReactNode } from 'react';
+import React, { useMemo, useState, useEffect, useCallback, Component, ErrorInfo, ReactNode } from 'react';
 import ReactFlow, {
     Node,
     Edge,
@@ -10,6 +10,9 @@ import ReactFlow, {
     Position,
     NodeProps,
     ReactFlowProvider,
+    Connection,
+    NodeDragHandler,
+    OnConnect,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { Database } from "@/types/database";
@@ -64,7 +67,7 @@ const ProjectNode = React.memo(({ data }: NodeProps) => (
 ProjectNode.displayName = 'ProjectNode';
 
 const GroupNode = React.memo(({ data }: NodeProps) => (
-    <div className="w-[150px] px-3 py-2 rounded-lg bg-card border text-sm font-medium text-center shadow">
+    <div className="w-[150px] px-3 py-2 rounded-lg bg-card border text-sm font-medium text-center shadow cursor-grab active:cursor-grabbing">
         <Handle type="target" position={Position.Left} className="!bg-muted-foreground" />
         {data?.label ?? 'Group'}
         <Handle type="source" position={Position.Right} className="!bg-muted-foreground" />
@@ -73,7 +76,7 @@ const GroupNode = React.memo(({ data }: NodeProps) => (
 GroupNode.displayName = 'GroupNode';
 
 const TaskNode = React.memo(({ data }: NodeProps) => (
-    <div className="w-[130px] px-2 py-1.5 rounded bg-background border text-xs shadow-sm flex items-center gap-1">
+    <div className="w-[130px] px-2 py-1.5 rounded bg-background border text-xs shadow-sm flex items-center gap-1 cursor-grab active:cursor-grabbing">
         <Handle type="target" position={Position.Left} className="!bg-muted-foreground/50 !w-1 !h-1" />
         <div className={cn("w-1.5 h-1.5 rounded-full", data?.status === 'done' ? "bg-primary" : "bg-muted-foreground/30")} />
         <span className={cn("truncate", data?.status === 'done' && "line-through text-muted-foreground")}>{data?.label ?? 'Task'}</span>
@@ -98,7 +101,7 @@ interface MindMapProps {
     onMoveTask?: (taskId: string, newGroupId: string) => Promise<void>
 }
 
-function MindMapContent({ project, groups, tasks }: MindMapProps) {
+function MindMapContent({ project, groups, tasks, onUpdateTask, onMoveTask }: MindMapProps) {
     const projectId = project?.id ?? '';
     const groupsJson = JSON.stringify(groups?.map(g => ({ id: g?.id, title: g?.title })) ?? []);
     const tasksJson = JSON.stringify(tasks?.map(t => ({
@@ -109,12 +112,17 @@ function MindMapContent({ project, groups, tasks }: MindMapProps) {
         parent_task_id: t?.parent_task_id
     })) ?? []);
 
-    const { nodes, edges } = useMemo(() => {
+    // State for nodes (needed for drag interaction)
+    const [nodes, setNodes] = useState<Node[]>([]);
+    const [edges, setEdges] = useState<Edge[]>([]);
+
+    // Build initial nodes/edges from data
+    const { initialNodes, initialEdges } = useMemo(() => {
         const resultNodes: Node[] = [];
         const resultEdges: Edge[] = [];
 
         if (!projectId) {
-            return { nodes: resultNodes, edges: resultEdges };
+            return { initialNodes: resultNodes, initialEdges: resultEdges };
         }
 
         try {
@@ -133,17 +141,16 @@ function MindMapContent({ project, groups, tasks }: MindMapProps) {
                 type: 'projectNode',
                 data: { label: project?.title ?? 'Project' },
                 position: { x: 50, y: 200 },
+                draggable: false,
             });
 
             const safeGroups = parsedGroups.filter(g => g?.id);
             const groupIdSet = new Set(safeGroups.map(g => g.id));
             const safeTasks = parsedTasks.filter(t => t?.id && t?.group_id && groupIdSet.has(t.group_id));
 
-            // Separate parent and child tasks
             const parentTasks = safeTasks.filter(t => !t.parent_task_id);
             const childTasks = safeTasks.filter(t => t.parent_task_id);
 
-            // Map children to parents
             const childTasksByParent: Record<string, typeof safeTasks> = {};
             for (const task of childTasks) {
                 if (task.parent_task_id) {
@@ -154,7 +161,6 @@ function MindMapContent({ project, groups, tasks }: MindMapProps) {
                 }
             }
 
-            // Group parent tasks
             const parentTasksByGroup: Record<string, typeof safeTasks> = {};
             for (const task of parentTasks) {
                 if (!parentTasksByGroup[task.group_id]) {
@@ -165,7 +171,6 @@ function MindMapContent({ project, groups, tasks }: MindMapProps) {
 
             let globalYOffset = 50;
 
-            // Create nodes
             safeGroups.forEach((group) => {
                 const groupY = globalYOffset;
 
@@ -174,6 +179,7 @@ function MindMapContent({ project, groups, tasks }: MindMapProps) {
                     type: 'groupNode',
                     data: { label: group.title ?? 'Group' },
                     position: { x: 300, y: groupY },
+                    draggable: true,
                 });
                 resultEdges.push({
                     id: `e-proj-${group.id}`,
@@ -186,12 +192,12 @@ function MindMapContent({ project, groups, tasks }: MindMapProps) {
                 let taskYOffset = groupY - 20;
 
                 groupParentTasks.forEach((task) => {
-                    // Parent task
                     resultNodes.push({
                         id: task.id,
                         type: 'taskNode',
                         data: { label: task.title ?? 'Task', status: task.status ?? 'todo' },
                         position: { x: 520, y: taskYOffset },
+                        draggable: true,
                     });
                     resultEdges.push({
                         id: `e-group-${task.id}`,
@@ -202,7 +208,6 @@ function MindMapContent({ project, groups, tasks }: MindMapProps) {
 
                     taskYOffset += 45;
 
-                    // Child tasks - connect to parent task
                     const children = childTasksByParent[task.id] ?? [];
                     children.forEach((child) => {
                         resultNodes.push({
@@ -210,6 +215,7 @@ function MindMapContent({ project, groups, tasks }: MindMapProps) {
                             type: 'taskNode',
                             data: { label: child.title ?? 'Subtask', status: child.status ?? 'todo' },
                             position: { x: 720, y: taskYOffset },
+                            draggable: true,
                         });
                         resultEdges.push({
                             id: `e-parent-${child.id}`,
@@ -227,8 +233,64 @@ function MindMapContent({ project, groups, tasks }: MindMapProps) {
             console.error('[MindMap] Error creating nodes:', err);
         }
 
-        return { nodes: resultNodes, edges: resultEdges };
+        return { initialNodes: resultNodes, initialEdges: resultEdges };
     }, [projectId, groupsJson, tasksJson, project?.title]);
+
+    // Update nodes when data changes (ONE-WAY: Data -> UI)
+    useEffect(() => {
+        setNodes(initialNodes);
+        setEdges(initialEdges);
+    }, [initialNodes, initialEdges]);
+
+    // EVENT-DRIVEN: Log position when drag ends (position persistence requires DB column)
+    const handleNodeDragStop: NodeDragHandler = useCallback((event, node) => {
+        console.log('[MindMap] Node dragged:', node.id, 'to', node.position);
+        // Position persistence would require adding a 'metadata' column to tasks table
+        // For now, positions reset on page reload
+    }, []);
+
+    // EVENT-DRIVEN: Handle new connection (parent-child relationship)
+    const handleConnect: OnConnect = useCallback(async (connection: Connection) => {
+        const sourceId = connection.source;
+        const targetId = connection.target;
+
+        if (!sourceId || !targetId) return;
+
+        console.log('[MindMap] New connection:', sourceId, '->', targetId);
+
+        const sourceNode = nodes.find(n => n.id === sourceId);
+
+        if (sourceNode?.type === 'taskNode' && onUpdateTask) {
+            // Connect task to another task = set parent
+            try {
+                await onUpdateTask(targetId, { parent_task_id: sourceId });
+                console.log('[MindMap] Updated parent_task_id:', targetId, '->', sourceId);
+            } catch (err) {
+                console.error('[MindMap] Failed to update parent:', err);
+            }
+        } else if (sourceNode?.type === 'groupNode' && onMoveTask) {
+            // Connect task to group = move to that group
+            try {
+                await onMoveTask(targetId, sourceId);
+                console.log('[MindMap] Moved task to group:', targetId, '->', sourceId);
+            } catch (err) {
+                console.error('[MindMap] Failed to move task:', err);
+            }
+        }
+    }, [nodes, onUpdateTask, onMoveTask]);
+
+    // Handle node position changes during drag (for visual feedback only)
+    const handleNodesChange = useCallback((changes: any[]) => {
+        setNodes((nds) => {
+            return nds.map((node) => {
+                const change = changes.find((c: any) => c.id === node.id && c.type === 'position' && c.position);
+                if (change) {
+                    return { ...node, position: change.position };
+                }
+                return node;
+            });
+        });
+    }, []);
 
     return (
         <div className="w-full h-full bg-muted/5">
@@ -237,11 +299,14 @@ function MindMapContent({ project, groups, tasks }: MindMapProps) {
                 edges={edges}
                 nodeTypes={nodeTypes}
                 defaultViewport={defaultViewport}
+                onNodesChange={handleNodesChange}
+                onNodeDragStop={handleNodeDragStop}
+                onConnect={handleConnect}
                 fitView
                 fitViewOptions={{ padding: 0.2 }}
                 deleteKeyCode={null}
-                nodesConnectable={false}
-                nodesDraggable={false}
+                nodesConnectable={true}
+                nodesDraggable={true}
                 panOnScroll={true}
                 zoomOnScroll={true}
                 minZoom={0.5}
