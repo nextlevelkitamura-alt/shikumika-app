@@ -54,7 +54,7 @@ class MindMapErrorBoundary extends Component<{ children: ReactNode }, { hasError
     }
 }
 
-// --- Custom Nodes (Pure Components, defined OUTSIDE to prevent recreation) ---
+// --- Custom Nodes ---
 const ProjectNode = React.memo(({ data }: NodeProps) => (
     <div className="w-[180px] px-4 py-3 rounded-xl bg-primary text-primary-foreground font-bold text-center shadow-lg">
         {data?.label ?? 'Project'}
@@ -77,11 +77,11 @@ const TaskNode = React.memo(({ data }: NodeProps) => (
         <Handle type="target" position={Position.Left} className="!bg-muted-foreground/50 !w-1 !h-1" />
         <div className={cn("w-1.5 h-1.5 rounded-full", data?.status === 'done' ? "bg-primary" : "bg-muted-foreground/30")} />
         <span className={cn("truncate", data?.status === 'done' && "line-through text-muted-foreground")}>{data?.label ?? 'Task'}</span>
+        <Handle type="source" position={Position.Right} className="!bg-muted-foreground/50 !w-1 !h-1" />
     </div>
 ));
 TaskNode.displayName = 'TaskNode';
 
-// CRITICAL: Define outside component to prevent recreation on every render
 const nodeTypes = { projectNode: ProjectNode, groupNode: GroupNode, taskNode: TaskNode };
 const defaultViewport = { x: 0, y: 0, zoom: 0.8 };
 
@@ -98,17 +98,17 @@ interface MindMapProps {
     onMoveTask?: (taskId: string, newGroupId: string) => Promise<void>
 }
 
-/**
- * MindMapContent: Pure rendering component with STABLE dependencies
- */
 function MindMapContent({ project, groups, tasks }: MindMapProps) {
-    // DEEP COMPARISON: Serialize to string for stable dependency
-    // This ensures useMemo only recalculates when actual DATA changes, not references
     const projectId = project?.id ?? '';
     const groupsJson = JSON.stringify(groups?.map(g => ({ id: g?.id, title: g?.title })) ?? []);
-    const tasksJson = JSON.stringify(tasks?.map(t => ({ id: t?.id, title: t?.title, status: t?.status, group_id: t?.group_id })) ?? []);
+    const tasksJson = JSON.stringify(tasks?.map(t => ({
+        id: t?.id,
+        title: t?.title,
+        status: t?.status,
+        group_id: t?.group_id,
+        parent_task_id: t?.parent_task_id
+    })) ?? []);
 
-    // DERIVED STATE with STABLE dependencies (string comparison, not reference)
     const { nodes, edges } = useMemo(() => {
         const resultNodes: Node[] = [];
         const resultEdges: Edge[] = [];
@@ -118,11 +118,16 @@ function MindMapContent({ project, groups, tasks }: MindMapProps) {
         }
 
         try {
-            // Parse back from JSON for actual use
             const parsedGroups = JSON.parse(groupsJson) as { id: string; title: string }[];
-            const parsedTasks = JSON.parse(tasksJson) as { id: string; title: string; status: string; group_id: string }[];
+            const parsedTasks = JSON.parse(tasksJson) as {
+                id: string;
+                title: string;
+                status: string;
+                group_id: string;
+                parent_task_id: string | null;
+            }[];
 
-            // 1. Project node
+            // Project node
             resultNodes.push({
                 id: 'project-root',
                 type: 'projectNode',
@@ -130,27 +135,45 @@ function MindMapContent({ project, groups, tasks }: MindMapProps) {
                 position: { x: 50, y: 200 },
             });
 
-            // 2. Safe arrays
             const safeGroups = parsedGroups.filter(g => g?.id);
             const groupIdSet = new Set(safeGroups.map(g => g.id));
             const safeTasks = parsedTasks.filter(t => t?.id && t?.group_id && groupIdSet.has(t.group_id));
 
-            // 3. Group tasks
-            const tasksByGroup: Record<string, typeof safeTasks> = {};
-            for (const task of safeTasks) {
-                if (!tasksByGroup[task.group_id]) {
-                    tasksByGroup[task.group_id] = [];
+            // Separate parent and child tasks
+            const parentTasks = safeTasks.filter(t => !t.parent_task_id);
+            const childTasks = safeTasks.filter(t => t.parent_task_id);
+
+            // Map children to parents
+            const childTasksByParent: Record<string, typeof safeTasks> = {};
+            for (const task of childTasks) {
+                if (task.parent_task_id) {
+                    if (!childTasksByParent[task.parent_task_id]) {
+                        childTasksByParent[task.parent_task_id] = [];
+                    }
+                    childTasksByParent[task.parent_task_id].push(task);
                 }
-                tasksByGroup[task.group_id].push(task);
             }
 
-            // 4. Create nodes and edges
-            safeGroups.forEach((group, index) => {
+            // Group parent tasks
+            const parentTasksByGroup: Record<string, typeof safeTasks> = {};
+            for (const task of parentTasks) {
+                if (!parentTasksByGroup[task.group_id]) {
+                    parentTasksByGroup[task.group_id] = [];
+                }
+                parentTasksByGroup[task.group_id].push(task);
+            }
+
+            let globalYOffset = 50;
+
+            // Create nodes
+            safeGroups.forEach((group) => {
+                const groupY = globalYOffset;
+
                 resultNodes.push({
                     id: group.id,
                     type: 'groupNode',
                     data: { label: group.title ?? 'Group' },
-                    position: { x: 300, y: 50 + index * 100 },
+                    position: { x: 300, y: groupY },
                 });
                 resultEdges.push({
                     id: `e-proj-${group.id}`,
@@ -159,13 +182,16 @@ function MindMapContent({ project, groups, tasks }: MindMapProps) {
                     type: 'smoothstep',
                 });
 
-                const groupTasks = tasksByGroup[group.id] ?? [];
-                groupTasks.forEach((task, taskIndex) => {
+                const groupParentTasks = parentTasksByGroup[group.id] ?? [];
+                let taskYOffset = groupY - 20;
+
+                groupParentTasks.forEach((task) => {
+                    // Parent task
                     resultNodes.push({
                         id: task.id,
                         type: 'taskNode',
                         data: { label: task.title ?? 'Task', status: task.status ?? 'todo' },
-                        position: { x: 520, y: 30 + index * 100 + taskIndex * 50 },
+                        position: { x: 520, y: taskYOffset },
                     });
                     resultEdges.push({
                         id: `e-group-${task.id}`,
@@ -173,14 +199,36 @@ function MindMapContent({ project, groups, tasks }: MindMapProps) {
                         target: task.id,
                         type: 'smoothstep',
                     });
+
+                    taskYOffset += 45;
+
+                    // Child tasks - connect to parent task
+                    const children = childTasksByParent[task.id] ?? [];
+                    children.forEach((child) => {
+                        resultNodes.push({
+                            id: child.id,
+                            type: 'taskNode',
+                            data: { label: child.title ?? 'Subtask', status: child.status ?? 'todo' },
+                            position: { x: 720, y: taskYOffset },
+                        });
+                        resultEdges.push({
+                            id: `e-parent-${child.id}`,
+                            source: task.id,
+                            target: child.id,
+                            type: 'smoothstep',
+                        });
+                        taskYOffset += 40;
+                    });
                 });
+
+                globalYOffset = Math.max(globalYOffset + 80, taskYOffset + 30);
             });
         } catch (err) {
             console.error('[MindMap] Error creating nodes:', err);
         }
 
         return { nodes: resultNodes, edges: resultEdges };
-    }, [projectId, groupsJson, tasksJson, project?.title]); // STRING dependencies, not object references
+    }, [projectId, groupsJson, tasksJson, project?.title]);
 
     return (
         <div className="w-full h-full bg-muted/5">
@@ -206,9 +254,6 @@ function MindMapContent({ project, groups, tasks }: MindMapProps) {
     );
 }
 
-/**
- * MindMap: Wrapper with hydration safety
- */
 export function MindMap(props: MindMapProps) {
     const [mounted, setMounted] = useState(false);
 
