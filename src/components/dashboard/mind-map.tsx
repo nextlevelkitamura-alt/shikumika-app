@@ -129,16 +129,115 @@ const ProjectNode = React.memo(({ data, selected }: NodeProps) => (
 ));
 ProjectNode.displayName = 'ProjectNode';
 
-const GroupNode = React.memo(({ data, selected }: NodeProps) => (
-    <div className={cn(
-        "w-[150px] px-3 py-2 rounded-lg bg-card border text-sm font-medium text-center shadow transition-all",
-        selected && "ring-2 ring-primary ring-offset-2 ring-offset-background"
-    )}>
-        <Handle type="target" position={Position.Left} className="!bg-muted-foreground" />
-        {data?.label ?? 'Group'}
-        <Handle type="source" position={Position.Right} className="!bg-muted-foreground" />
-    </div>
-));
+// GROUP NODE with keyboard support
+const GroupNode = React.memo(({ data, selected }: NodeProps) => {
+    const inputRef = useRef<HTMLInputElement>(null);
+    const wrapperRef = useRef<HTMLDivElement>(null);
+    const [isEditing, setIsEditing] = useState(false);
+    const [editValue, setEditValue] = useState(data?.label ?? '');
+
+    // Sync label
+    useEffect(() => {
+        if (!isEditing) {
+            setEditValue(data?.label ?? '');
+        }
+    }, [data?.label, isEditing]);
+
+    // Focus input when editing
+    useEffect(() => {
+        if (isEditing && inputRef.current) {
+            inputRef.current.focus();
+            inputRef.current.select();
+        }
+    }, [isEditing]);
+
+    // Focus wrapper when selected and not editing
+    useEffect(() => {
+        if (selected && !isEditing && wrapperRef.current) {
+            wrapperRef.current.focus();
+        }
+    }, [selected, isEditing]);
+
+    const saveValue = useCallback(async () => {
+        const trimmed = editValue.trim();
+        if (trimmed && trimmed !== data?.label && data?.onSave) {
+            await data.onSave(trimmed);
+        }
+    }, [editValue, data]);
+
+    const handleInputKeyDown = useCallback(async (e: React.KeyboardEvent<HTMLInputElement>) => {
+        e.stopPropagation();
+        if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+            e.preventDefault();
+            await saveValue();
+            setIsEditing(false);
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            setEditValue(data?.label ?? '');
+            setIsEditing(false);
+        }
+    }, [saveValue, data?.label]);
+
+    const handleWrapperKeyDown = useCallback(async (e: React.KeyboardEvent<HTMLDivElement>) => {
+        if (isEditing) return;
+        e.stopPropagation();
+
+        if (e.key === 'Delete' || e.key === 'Backspace') {
+            e.preventDefault();
+            if (data?.onDelete) await data.onDelete();
+        } else if (e.key === 'F2') {
+            e.preventDefault();
+            setIsEditing(true);
+            setEditValue(data?.label ?? '');
+        } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+            e.preventDefault();
+            setIsEditing(true);
+            setEditValue(e.key);
+        }
+    }, [isEditing, data]);
+
+    const handleDoubleClick = useCallback((e: React.MouseEvent) => {
+        e.stopPropagation();
+        setIsEditing(true);
+        setEditValue(data?.label ?? '');
+    }, [data?.label]);
+
+    const handleInputBlur = useCallback(async () => {
+        await saveValue();
+        setIsEditing(false);
+    }, [saveValue]);
+
+    return (
+        <div
+            ref={wrapperRef}
+            className={cn(
+                "w-[150px] px-3 py-2 rounded-lg bg-card border text-sm font-medium text-center shadow transition-all outline-none",
+                selected && "ring-2 ring-primary ring-offset-2 ring-offset-background"
+            )}
+            tabIndex={0}
+            onKeyDown={handleWrapperKeyDown}
+            onDoubleClick={handleDoubleClick}
+        >
+            <Handle type="target" position={Position.Left} className="!bg-muted-foreground" />
+            {isEditing ? (
+                <input
+                    ref={inputRef}
+                    type="text"
+                    value={editValue}
+                    onChange={(e) => setEditValue(e.target.value)}
+                    onBlur={handleInputBlur}
+                    onKeyDown={handleInputKeyDown}
+                    onClick={(e) => e.stopPropagation()}
+                    className="nodrag nopan w-full bg-transparent border-none text-sm text-center focus:outline-none focus:ring-0"
+                    autoFocus
+                />
+            ) : (
+                <span className="truncate">{data?.label ?? 'Group'}</span>
+            )}
+            <Handle type="source" position={Position.Right} className="!bg-muted-foreground" />
+        </div>
+    );
+});
 GroupNode.displayName = 'GroupNode';
 
 // TASK NODE
@@ -313,7 +412,7 @@ interface MindMapProps {
     onMoveTask?: (taskId: string, newGroupId: string) => Promise<void>
 }
 
-function MindMapContent({ project, groups, tasks, onCreateGroup, onCreateTask, onUpdateTask, onDeleteTask }: MindMapProps) {
+function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGroup, onDeleteGroup, onCreateTask, onUpdateTask, onDeleteTask }: MindMapProps) {
     const projectId = project?.id ?? '';
     const groupsJson = JSON.stringify(groups?.map(g => ({ id: g?.id, title: g?.title })) ?? []);
     const tasksJson = JSON.stringify(tasks?.map(t => ({
@@ -572,7 +671,11 @@ function MindMapContent({ project, groups, tasks, onCreateGroup, onCreateTask, o
                 resultNodes.push({
                     id: group.id,
                     type: 'groupNode',
-                    data: { label: group.title ?? 'Group' },
+                    data: {
+                        label: group.title ?? 'Group',
+                        onSave: (newTitle: string) => onUpdateGroupTitle?.(group.id, newTitle),
+                        onDelete: () => onDeleteGroup?.(group.id),
+                    },
                     position: { x: 300, y: groupY },
                     selected: selectedNodeId === group.id,
                 });
@@ -593,7 +696,7 @@ function MindMapContent({ project, groups, tasks, onCreateGroup, onCreateTask, o
 
         // Apply dagre layout to get optimal positions
         return getLayoutedElements(resultNodes, resultEdges);
-    }, [projectId, groupsJson, tasksJson, project?.title, selectedNodeId, shouldTriggerEdit, saveTaskTitle, addChildTask, addSiblingTask, deleteTask]);
+    }, [projectId, groupsJson, tasksJson, project?.title, selectedNodeId, shouldTriggerEdit, saveTaskTitle, addChildTask, addSiblingTask, deleteTask, onUpdateGroupTitle, onDeleteGroup]);
 
     const handleNodeClick: NodeMouseHandler = useCallback((_, node) => setSelectedNodeId(node.id), []);
     const handlePaneClick = useCallback(() => setSelectedNodeId(null), []);
