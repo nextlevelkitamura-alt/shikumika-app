@@ -313,7 +313,7 @@ interface MindMapProps {
     onMoveTask?: (taskId: string, newGroupId: string) => Promise<void>
 }
 
-function MindMapContent({ project, groups, tasks, onCreateTask, onUpdateTask, onDeleteTask }: MindMapProps) {
+function MindMapContent({ project, groups, tasks, onCreateGroup, onCreateTask, onUpdateTask, onDeleteTask }: MindMapProps) {
     const projectId = project?.id ?? '';
     const groupsJson = JSON.stringify(groups?.map(g => ({ id: g?.id, title: g?.title })) ?? []);
     const tasksJson = JSON.stringify(tasks?.map(t => ({
@@ -609,8 +609,14 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onUpdateTask, on
                 isCreatingNodeRef.current = true;
                 await onCreateTask(selectedNodeId, "", null);
             }
+        } else if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
+            // Create new group when Enter is pressed on a group node
+            event.preventDefault();
+            if (onCreateGroup) {
+                onCreateGroup("New Group");
+            }
         }
-    }, [selectedNodeId, groups, onCreateTask]);
+    }, [selectedNodeId, groups, onCreateTask, onCreateGroup]);
 
     return (
         <div className="w-full h-full bg-muted/5 relative outline-none" tabIndex={0} onKeyDown={handleContainerKeyDown}>
