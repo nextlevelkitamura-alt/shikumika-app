@@ -164,27 +164,16 @@ function TaskItem({
                         フォーカス
                     </Button>
 
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground">
-                                <MoreHorizontal className="w-3 h-3" />
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={handleAddChildTask}>
-                                <Plus className="w-3 h-3 mr-2" />
-                                サブタスク追加
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                                className="text-destructive focus:text-destructive"
-                                onClick={() => onDeleteTask?.(task.id)}
-                            >
-                                <Trash2 className="w-3 h-3 mr-2" />
-                                削除
-                            </DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
+                    {/* Direct Delete Button */}
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 text-destructive hover:bg-destructive/10"
+                        onClick={() => onDeleteTask?.(task.id)}
+                        title="削除"
+                    >
+                        <Trash2 className="w-3 h-3" />
+                    </Button>
                 </div>
             </div>
 
