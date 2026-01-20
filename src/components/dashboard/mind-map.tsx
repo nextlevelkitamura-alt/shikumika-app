@@ -106,13 +106,19 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
     useEffect(() => {
         if (isEditing && inputRef.current) {
             inputRef.current.focus();
-            // Move cursor to end
             const len = inputRef.current.value.length;
             inputRef.current.setSelectionRange(len, len);
         }
     }, [isEditing]);
 
-    // Save current value to Supabase
+    // Auto-focus wrapper when selected and not editing (for shortcuts)
+    useEffect(() => {
+        if (selected && !isEditing && wrapperRef.current) {
+            wrapperRef.current.focus();
+        }
+    }, [selected, isEditing]);
+
+    // Save current value
     const saveValue = useCallback(async () => {
         const trimmed = editValue.trim() || 'Task';
         if (trimmed !== data?.label && data?.onSave) {
@@ -121,36 +127,29 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
         return trimmed;
     }, [editValue, data]);
 
-    // Exit edit mode and focus wrapper for shortcuts
+    // Exit edit mode and focus wrapper
     const exitEditMode = useCallback(() => {
         setIsEditing(false);
-        // Focus wrapper to enable shortcuts
         setTimeout(() => {
             wrapperRef.current?.focus();
         }, 0);
     }, []);
 
-    // Handle input keydown - Enter, Tab, Escape
+    // Handle input keydown
     const handleInputKeyDown = useCallback(async (e: React.KeyboardEvent<HTMLInputElement>) => {
-        e.stopPropagation(); // Always stop propagation from input
+        e.stopPropagation();
 
         if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
-            // Enter: Save and return to View Mode
             e.preventDefault();
             await saveValue();
             exitEditMode();
-
         } else if (e.key === 'Tab') {
-            // Tab: Save → Add Child → Focus new node (ALL IN ONE ACTION)
             e.preventDefault();
             await saveValue();
             setIsEditing(false);
-
-            // Trigger add child via parent callback
             if (data?.onAddChild) {
                 await data.onAddChild();
             }
-
         } else if (e.key === 'Escape') {
             e.preventDefault();
             setEditValue(data?.label ?? '');
@@ -158,51 +157,38 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
         }
     }, [saveValue, exitEditMode, data]);
 
-    // Handle wrapper keydown (View Mode shortcuts)
+    // Handle wrapper keydown (View Mode)
     const handleWrapperKeyDown = useCallback(async (e: React.KeyboardEvent<HTMLDivElement>) => {
-        if (isEditing) return; // Skip if editing
+        if (isEditing) return;
 
         e.stopPropagation();
 
         if (e.key === 'Tab') {
-            // Tab: Add child
             e.preventDefault();
-            if (data?.onAddChild) {
-                await data.onAddChild();
-            }
+            if (data?.onAddChild) await data.onAddChild();
         } else if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
-            // Enter: Add sibling
             e.preventDefault();
-            if (data?.onAddSibling) {
-                await data.onAddSibling();
-            }
+            if (data?.onAddSibling) await data.onAddSibling();
         } else if (e.key === 'Delete' || e.key === 'Backspace') {
-            // Delete: Remove node
             e.preventDefault();
-            if (data?.onDelete) {
-                await data.onDelete();
-            }
+            if (data?.onDelete) await data.onDelete();
         } else if (e.key === 'F2') {
-            // F2: Enter edit mode
             e.preventDefault();
             setIsEditing(true);
             setEditValue(data?.label ?? '');
         } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-            // Character key: Enter edit mode with that character
             e.preventDefault();
             setIsEditing(true);
             setEditValue(e.key);
         }
     }, [isEditing, data]);
 
-    // Double-click to edit
     const handleDoubleClick = useCallback((e: React.MouseEvent) => {
         e.stopPropagation();
         setIsEditing(true);
         setEditValue(data?.label ?? '');
     }, [data?.label]);
 
-    // Blur handler for input
     const handleInputBlur = useCallback(async () => {
         await saveValue();
         setIsEditing(false);
@@ -220,14 +206,8 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
             onDoubleClick={handleDoubleClick}
         >
             <Handle type="target" position={Position.Left} className="!bg-muted-foreground/50 !w-1 !h-1" />
+            <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", data?.status === 'done' ? "bg-primary" : "bg-muted-foreground/30")} />
 
-            {/* Status indicator */}
-            <div className={cn(
-                "w-1.5 h-1.5 rounded-full shrink-0",
-                data?.status === 'done' ? "bg-primary" : "bg-muted-foreground/30"
-            )} />
-
-            {/* EDIT MODE: Input */}
             {isEditing ? (
                 <input
                     ref={inputRef}
@@ -241,13 +221,7 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
                     autoFocus
                 />
             ) : (
-                /* VIEW MODE: Text display */
-                <span
-                    className={cn(
-                        "flex-1 truncate px-0.5",
-                        data?.status === 'done' && "line-through text-muted-foreground"
-                    )}
-                >
+                <span className={cn("flex-1 truncate px-0.5", data?.status === 'done' && "line-through text-muted-foreground")}>
                     {data?.label ?? 'Task'}
                 </span>
             )}
@@ -282,18 +256,69 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onUpdateTask, on
         title: t?.title,
         status: t?.status,
         group_id: t?.group_id,
-        parent_task_id: t?.parent_task_id
+        parent_task_id: t?.parent_task_id,
+        order_index: t?.order_index
     })) ?? []);
 
     // STATE
     const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-    const [pendingEditNodeId, setPendingEditNodeId] = useState<string | null>(null);
-    const [pendingInitialValue, setPendingInitialValue] = useState<string>('');
+    const [lastCreatedTaskId, setLastCreatedTaskId] = useState<string | null>(null);
 
-    // Get task info helpers
+    // EFFECT: Focus newly created task
+    useEffect(() => {
+        if (lastCreatedTaskId) {
+            // Check if the task exists in the current tasks array
+            const taskExists = tasks.some(t => t.id === lastCreatedTaskId);
+            if (taskExists) {
+                setSelectedNodeId(lastCreatedTaskId);
+                // Clear after handling
+                setLastCreatedTaskId(null);
+            }
+        }
+    }, [lastCreatedTaskId, tasks]);
+
+    // Helper functions
     const getTaskById = useCallback((id: string) => tasks.find(t => t.id === id), [tasks]);
     const getGroupForTask = useCallback((task: Task) => groups.find(g => g.id === task.group_id), [groups]);
     const hasChildren = useCallback((taskId: string) => tasks.some(t => t.parent_task_id === taskId), [tasks]);
+
+    // Get siblings of a task (sorted by order_index)
+    const getSiblings = useCallback((task: Task) => {
+        return tasks
+            .filter(t => t.group_id === task.group_id && t.parent_task_id === task.parent_task_id && t.id !== task.id)
+            .sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0));
+    }, [tasks]);
+
+    // Calculate next focus after deletion
+    const calculateNextFocus = useCallback((taskId: string): string | null => {
+        const task = getTaskById(taskId);
+        if (!task) return null;
+
+        // Get all siblings (including self) sorted by order_index
+        const allSiblings = tasks
+            .filter(t => t.group_id === task.group_id && t.parent_task_id === task.parent_task_id)
+            .sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0));
+
+        const currentIndex = allSiblings.findIndex(t => t.id === taskId);
+
+        // Priority 1: Previous sibling
+        if (currentIndex > 0) {
+            return allSiblings[currentIndex - 1].id;
+        }
+
+        // Priority 2: Next sibling
+        if (currentIndex < allSiblings.length - 1) {
+            return allSiblings[currentIndex + 1].id;
+        }
+
+        // Priority 3: Parent (or group if no parent)
+        if (task.parent_task_id) {
+            return task.parent_task_id;
+        }
+
+        // Fallback to group
+        return task.group_id;
+    }, [tasks, getTaskById]);
 
     // Add child task
     const addChildTask = useCallback(async (parentTaskId: string) => {
@@ -304,9 +329,7 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onUpdateTask, on
 
         const newTask = await onCreateTask(group.id, "", parentTaskId);
         if (newTask) {
-            setSelectedNodeId(newTask.id);
-            setPendingEditNodeId(newTask.id);
-            setPendingInitialValue('');
+            setLastCreatedTaskId(newTask.id);
         }
     }, [getTaskById, getGroupForTask, onCreateTask]);
 
@@ -319,24 +342,29 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onUpdateTask, on
 
         const newTask = await onCreateTask(group.id, "", task.parent_task_id);
         if (newTask) {
-            setSelectedNodeId(newTask.id);
-            setPendingEditNodeId(newTask.id);
-            setPendingInitialValue('');
+            setLastCreatedTaskId(newTask.id);
         }
     }, [getTaskById, getGroupForTask, onCreateTask]);
 
-    // Delete task
+    // Delete task with smart focus navigation
     const deleteTask = useCallback(async (taskId: string) => {
         if (!onDeleteTask) return;
 
+        // Confirm if has children
         if (hasChildren(taskId)) {
             const confirmed = window.confirm('子タスクを含むタスクを削除しますか？\nすべての子タスクも削除されます。');
             if (!confirmed) return;
         }
 
+        // Calculate next focus BEFORE deleting
+        const nextFocusId = calculateNextFocus(taskId);
+
+        // Perform deletion
         await onDeleteTask(taskId);
-        setSelectedNodeId(null);
-    }, [hasChildren, onDeleteTask]);
+
+        // Set focus to calculated next node
+        setSelectedNodeId(nextFocusId);
+    }, [hasChildren, calculateNextFocus, onDeleteTask]);
 
     // Save task title
     const saveTaskTitle = useCallback(async (taskId: string, newTitle: string) => {
@@ -345,16 +373,10 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onUpdateTask, on
         }
     }, [onUpdateTask]);
 
-    // Clear pending edit after handled
-    useEffect(() => {
-        if (pendingEditNodeId) {
-            const timer = setTimeout(() => {
-                setPendingEditNodeId(null);
-                setPendingInitialValue('');
-            }, 100);
-            return () => clearTimeout(timer);
-        }
-    }, [pendingEditNodeId]);
+    // Check if lastCreatedTaskId should trigger edit
+    const shouldTriggerEdit = useCallback((taskId: string) => {
+        return lastCreatedTaskId === taskId;
+    }, [lastCreatedTaskId]);
 
     // DERIVED STATE: nodes and edges
     const { nodes, edges } = useMemo(() => {
@@ -373,6 +395,7 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onUpdateTask, on
                 status: string;
                 group_id: string;
                 parent_task_id: string | null;
+                order_index: number;
             }[];
 
             // Project node
@@ -388,7 +411,7 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onUpdateTask, on
             const groupIdSet = new Set(safeGroups.map(g => g.id));
             const safeTasks = parsedTasks.filter(t => t?.id && t?.group_id && groupIdSet.has(t.group_id));
 
-            const parentTasks = safeTasks.filter(t => !t.parent_task_id);
+            const parentTasks = safeTasks.filter(t => !t.parent_task_id).sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0));
             const childTasks = safeTasks.filter(t => t.parent_task_id);
 
             const childTasksByParent: Record<string, typeof safeTasks> = {};
@@ -399,6 +422,10 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onUpdateTask, on
                     }
                     childTasksByParent[task.parent_task_id].push(task);
                 }
+            }
+            // Sort children by order_index
+            for (const key of Object.keys(childTasksByParent)) {
+                childTasksByParent[key].sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0));
             }
 
             const parentTasksByGroup: Record<string, typeof safeTasks> = {};
@@ -432,7 +459,7 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onUpdateTask, on
                 let taskYOffset = groupY - 20;
 
                 groupParentTasks.forEach((task) => {
-                    const shouldTriggerEdit = pendingEditNodeId === task.id;
+                    const triggerEdit = shouldTriggerEdit(task.id);
 
                     resultNodes.push({
                         id: task.id,
@@ -440,8 +467,8 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onUpdateTask, on
                         data: {
                             label: task.title ?? 'Task',
                             status: task.status ?? 'todo',
-                            triggerEdit: shouldTriggerEdit,
-                            initialValue: shouldTriggerEdit ? pendingInitialValue : undefined,
+                            triggerEdit,
+                            initialValue: triggerEdit ? '' : undefined,
                             onSave: (newTitle: string) => saveTaskTitle(task.id, newTitle),
                             onAddChild: () => addChildTask(task.id),
                             onAddSibling: () => addSiblingTask(task.id),
@@ -461,7 +488,7 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onUpdateTask, on
 
                     const children = childTasksByParent[task.id] ?? [];
                     children.forEach((child) => {
-                        const shouldTriggerChildEdit = pendingEditNodeId === child.id;
+                        const triggerChildEdit = shouldTriggerEdit(child.id);
 
                         resultNodes.push({
                             id: child.id,
@@ -469,8 +496,8 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onUpdateTask, on
                             data: {
                                 label: child.title ?? 'Subtask',
                                 status: child.status ?? 'todo',
-                                triggerEdit: shouldTriggerChildEdit,
-                                initialValue: shouldTriggerChildEdit ? pendingInitialValue : undefined,
+                                triggerEdit: triggerChildEdit,
+                                initialValue: triggerChildEdit ? '' : undefined,
                                 onSave: (newTitle: string) => saveTaskTitle(child.id, newTitle),
                                 onAddChild: () => addChildTask(child.id),
                                 onAddSibling: () => addSiblingTask(child.id),
@@ -496,36 +523,31 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onUpdateTask, on
         }
 
         return { nodes: resultNodes, edges: resultEdges };
-    }, [projectId, groupsJson, tasksJson, project?.title, selectedNodeId, pendingEditNodeId, pendingInitialValue, saveTaskTitle, addChildTask, addSiblingTask, deleteTask]);
+    }, [projectId, groupsJson, tasksJson, project?.title, selectedNodeId, shouldTriggerEdit, saveTaskTitle, addChildTask, addSiblingTask, deleteTask]);
 
-    // Handle node click to select
+    // Handle node click
     const handleNodeClick: NodeMouseHandler = useCallback((event, node) => {
         setSelectedNodeId(node.id);
     }, []);
 
-    // Handle pane click to deselect
+    // Handle pane click
     const handlePaneClick = useCallback(() => {
         setSelectedNodeId(null);
     }, []);
 
-    // Handle container keydown for Group node shortcuts
+    // Container keydown for Group nodes
     const handleContainerKeyDown = useCallback(async (event: React.KeyboardEvent) => {
-        // Only handle shortcuts for Group nodes here
-        // Task nodes handle their own shortcuts via wrapper
         if (!selectedNodeId) return;
 
         const isGroupNode = groups.some(g => g.id === selectedNodeId);
-        if (!isGroupNode) return; // Let TaskNode handle its own events
+        if (!isGroupNode) return;
 
         if (event.key === 'Tab') {
             event.preventDefault();
-            // Tab on group = create new root task
             if (onCreateTask) {
                 const newTask = await onCreateTask(selectedNodeId, "", null);
                 if (newTask) {
-                    setSelectedNodeId(newTask.id);
-                    setPendingEditNodeId(newTask.id);
-                    setPendingInitialValue('');
+                    setLastCreatedTaskId(newTask.id);
                 }
             }
         }
@@ -554,16 +576,10 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onUpdateTask, on
                 minZoom={0.5}
                 maxZoom={1.5}
             >
-                <Background
-                    variant={BackgroundVariant.Dots}
-                    gap={20}
-                    size={1}
-                    color="rgba(255, 255, 255, 0.15)"
-                />
+                <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="rgba(255, 255, 255, 0.15)" />
                 <Controls showInteractive={false} />
             </ReactFlow>
 
-            {/* Keyboard shortcut hint */}
             {selectedNodeId && selectedNodeId !== 'project-root' && (
                 <div className="absolute bottom-4 left-4 bg-card/90 backdrop-blur border rounded-lg p-2 text-xs text-muted-foreground shadow-lg">
                     <div className="flex gap-3">
@@ -580,17 +596,10 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onUpdateTask, on
 
 export function MindMap(props: MindMapProps) {
     const [mounted, setMounted] = useState(false);
-
-    useEffect(() => {
-        setMounted(true);
-    }, []);
+    useEffect(() => { setMounted(true); }, []);
 
     if (!mounted) {
-        return (
-            <div className="w-full h-full bg-muted/5 flex items-center justify-center text-muted-foreground">
-                Loading...
-            </div>
-        );
+        return <div className="w-full h-full bg-muted/5 flex items-center justify-center text-muted-foreground">Loading...</div>;
     }
 
     return (
