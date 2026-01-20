@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback } from "react"
+import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { LeftSidebar } from "@/components/dashboard/left-sidebar"
 import { CenterPane } from "@/components/dashboard/center-pane"
 import { RightSidebar } from "@/components/dashboard/right-sidebar"
@@ -107,11 +107,62 @@ export function DashboardClient({
         await deleteGroup(groupId)
     }, [deleteGroup])
 
+    // Resizable Sidebar State
+    const [leftSidebarWidth, setLeftSidebarWidth] = useState(280)
+    const [rightSidebarWidth, setRightSidebarWidth] = useState(300)
+    const isDraggingLeftRef = useRef(false)
+    const isDraggingRightRef = useRef(false)
+
+    // Handle sidebar resize
+    const handleLeftMouseDown = useCallback((e: React.MouseEvent) => {
+        isDraggingLeftRef.current = true
+        e.preventDefault()
+        document.body.style.userSelect = 'none'
+        document.body.style.cursor = 'col-resize'
+    }, [])
+
+    const handleRightMouseDown = useCallback((e: React.MouseEvent) => {
+        isDraggingRightRef.current = true
+        e.preventDefault()
+        document.body.style.userSelect = 'none'
+        document.body.style.cursor = 'col-resize'
+    }, [])
+
+    useEffect(() => {
+        const handleMouseMove = (e: MouseEvent) => {
+            if (isDraggingLeftRef.current) {
+                const newWidth = Math.max(200, Math.min(450, e.clientX))
+                setLeftSidebarWidth(newWidth)
+            }
+            if (isDraggingRightRef.current) {
+                const newWidth = Math.max(200, Math.min(500, window.innerWidth - e.clientX))
+                setRightSidebarWidth(newWidth)
+            }
+        }
+
+        const handleMouseUp = () => {
+            isDraggingLeftRef.current = false
+            isDraggingRightRef.current = false
+            document.body.style.userSelect = ''
+            document.body.style.cursor = ''
+        }
+
+        document.addEventListener('mousemove', handleMouseMove)
+        document.addEventListener('mouseup', handleMouseUp)
+        return () => {
+            document.removeEventListener('mousemove', handleMouseMove)
+            document.removeEventListener('mouseup', handleMouseUp)
+        }
+    }, [])
+
     return (
         <TimerProvider tasks={currentTasks} onUpdateTask={updateTask}>
             <div className="flex h-full w-full">
                 {/* Pane 1: Left Sidebar */}
-                <div className="hidden md:block w-[250px] lg:w-[300px] flex-none overflow-hidden h-full">
+                <div
+                    className="hidden md:flex flex-none overflow-hidden h-full"
+                    style={{ width: leftSidebarWidth }}
+                >
                     <LeftSidebar
                         goals={goals}
                         selectedGoalId={selectedGoalId}
@@ -122,8 +173,16 @@ export function DashboardClient({
                     />
                 </div>
 
+                {/* Left Resize Handle */}
+                <div
+                    className="hidden md:flex w-1 h-full bg-border hover:bg-primary/50 cursor-col-resize transition-colors flex-none items-center justify-center group"
+                    onMouseDown={handleLeftMouseDown}
+                >
+                    <div className="w-0.5 h-8 bg-muted-foreground/20 group-hover:bg-primary rounded-full" />
+                </div>
+
                 {/* Pane 2: Center (MindMap + Lists) */}
-                <div className="flex-1 min-w-0 overflow-hidden border-r border-l h-full">
+                <div className="flex-1 min-w-0 overflow-hidden h-full">
                     <CenterPane
                         project={selectedProject}
                         groups={currentGroups}
@@ -138,11 +197,23 @@ export function DashboardClient({
                     />
                 </div>
 
+                {/* Right Resize Handle */}
+                <div
+                    className="hidden lg:flex w-1 h-full bg-border hover:bg-primary/50 cursor-col-resize transition-colors flex-none items-center justify-center group"
+                    onMouseDown={handleRightMouseDown}
+                >
+                    <div className="w-0.5 h-8 bg-muted-foreground/20 group-hover:bg-primary rounded-full" />
+                </div>
+
                 {/* Pane 3: Right Sidebar (Calendar) */}
-                <div className="hidden lg:block w-[300px] flex-none overflow-hidden h-full">
+                <div
+                    className="hidden lg:block flex-none overflow-hidden h-full"
+                    style={{ width: rightSidebarWidth }}
+                >
                     <RightSidebar />
                 </div>
             </div>
         </TimerProvider>
     )
 }
+

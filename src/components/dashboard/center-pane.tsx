@@ -359,7 +359,7 @@ export function CenterPane({
                     <h2 className="font-semibold text-sm">タスク</h2>
                 </div>
 
-                <ScrollArea className="flex-1">
+                <ScrollArea className="flex-1 h-full overflow-y-auto">
                     <div className="space-y-3 p-2 pb-20">
                         {groups.map((group) => {
                             // Get only parent tasks (no parent_task_id)
