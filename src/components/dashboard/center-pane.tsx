@@ -329,7 +329,23 @@ export function CenterPane({
 
                                         <div className="flex-1 min-w-0">
                                             <div className="flex items-center justify-between">
-                                                <span className="font-medium text-sm truncate">{group.title}</span>
+                                                <input
+                                                    className="font-medium text-sm truncate bg-transparent border-none focus:outline-none focus:ring-0 px-0 min-w-0 flex-1"
+                                                    defaultValue={group.title}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    onBlur={(e) => {
+                                                        if (e.target.value !== group.title) {
+                                                            onUpdateGroupTitle?.(group.id, e.target.value)
+                                                        }
+                                                    }}
+                                                    onKeyDown={(e) => {
+                                                        if (e.nativeEvent.isComposing) return;
+                                                        if (e.key === 'Enter') {
+                                                            e.preventDefault();
+                                                            e.currentTarget.blur();
+                                                        }
+                                                    }}
+                                                />
                                                 <div className="flex items-center gap-4">
                                                     <MiniProgress value={completedCount} total={allGroupTasks.length} />
                                                     <DropdownMenu>
