@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useMemo, useState, useEffect, Component, ErrorInfo, ReactNode } from 'react';
+import React, { useMemo, useState, useEffect, useCallback, Component, ErrorInfo, ReactNode } from 'react';
 import ReactFlow, {
     Node,
     Edge,
@@ -10,6 +10,8 @@ import ReactFlow, {
     Position,
     NodeProps,
     ReactFlowProvider,
+    useReactFlow,
+    NodeMouseHandler,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { Database } from "@/types/database";
@@ -55,16 +57,22 @@ class MindMapErrorBoundary extends Component<{ children: ReactNode }, { hasError
 }
 
 // --- Custom Nodes ---
-const ProjectNode = React.memo(({ data }: NodeProps) => (
-    <div className="w-[180px] px-4 py-3 rounded-xl bg-primary text-primary-foreground font-bold text-center shadow-lg">
+const ProjectNode = React.memo(({ data, selected }: NodeProps) => (
+    <div className={cn(
+        "w-[180px] px-4 py-3 rounded-xl bg-primary text-primary-foreground font-bold text-center shadow-lg transition-all",
+        selected && "ring-2 ring-white ring-offset-2 ring-offset-background"
+    )}>
         {data?.label ?? 'Project'}
         <Handle type="source" position={Position.Right} className="!bg-primary-foreground" />
     </div>
 ));
 ProjectNode.displayName = 'ProjectNode';
 
-const GroupNode = React.memo(({ data }: NodeProps) => (
-    <div className="w-[150px] px-3 py-2 rounded-lg bg-card border text-sm font-medium text-center shadow">
+const GroupNode = React.memo(({ data, selected }: NodeProps) => (
+    <div className={cn(
+        "w-[150px] px-3 py-2 rounded-lg bg-card border text-sm font-medium text-center shadow transition-all",
+        selected && "ring-2 ring-primary ring-offset-2 ring-offset-background"
+    )}>
         <Handle type="target" position={Position.Left} className="!bg-muted-foreground" />
         {data?.label ?? 'Group'}
         <Handle type="source" position={Position.Right} className="!bg-muted-foreground" />
@@ -72,8 +80,11 @@ const GroupNode = React.memo(({ data }: NodeProps) => (
 ));
 GroupNode.displayName = 'GroupNode';
 
-const TaskNode = React.memo(({ data }: NodeProps) => (
-    <div className="w-[130px] px-2 py-1.5 rounded bg-background border text-xs shadow-sm flex items-center gap-1">
+const TaskNode = React.memo(({ data, selected }: NodeProps) => (
+    <div className={cn(
+        "w-[130px] px-2 py-1.5 rounded bg-background border text-xs shadow-sm flex items-center gap-1 transition-all",
+        selected && "ring-2 ring-primary ring-offset-1 ring-offset-background border-primary"
+    )}>
         <Handle type="target" position={Position.Left} className="!bg-muted-foreground/50 !w-1 !h-1" />
         <div className={cn("w-1.5 h-1.5 rounded-full", data?.status === 'done' ? "bg-primary" : "bg-muted-foreground/30")} />
         <span className={cn("truncate", data?.status === 'done' && "line-through text-muted-foreground")}>{data?.label ?? 'Task'}</span>
@@ -98,7 +109,7 @@ interface MindMapProps {
     onMoveTask?: (taskId: string, newGroupId: string) => Promise<void>
 }
 
-function MindMapContent({ project, groups, tasks }: MindMapProps) {
+function MindMapContent({ project, groups, tasks, onCreateTask, onDeleteTask }: MindMapProps) {
     const projectId = project?.id ?? '';
     const groupsJson = JSON.stringify(groups?.map(g => ({ id: g?.id, title: g?.title })) ?? []);
     const tasksJson = JSON.stringify(tasks?.map(t => ({
@@ -109,7 +120,29 @@ function MindMapContent({ project, groups, tasks }: MindMapProps) {
         parent_task_id: t?.parent_task_id
     })) ?? []);
 
-    // DERIVED STATE: nodes and edges computed directly from props
+    // Selected node state for keyboard navigation
+    const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+    const { setCenter } = useReactFlow();
+
+    // Get task data for selected node
+    const selectedTask = useMemo(() => {
+        if (!selectedNodeId) return null;
+        return tasks.find(t => t.id === selectedNodeId) ?? null;
+    }, [selectedNodeId, tasks]);
+
+    // Get group for selected task
+    const selectedGroup = useMemo(() => {
+        if (!selectedTask) return null;
+        return groups.find(g => g.id === selectedTask.group_id) ?? null;
+    }, [selectedTask, groups]);
+
+    // Check if selected node has children
+    const selectedNodeHasChildren = useMemo(() => {
+        if (!selectedNodeId) return false;
+        return tasks.some(t => t.parent_task_id === selectedNodeId);
+    }, [selectedNodeId, tasks]);
+
+    // DERIVED STATE: nodes and edges
     const { nodes, edges } = useMemo(() => {
         const resultNodes: Node[] = [];
         const resultEdges: Edge[] = [];
@@ -134,6 +167,7 @@ function MindMapContent({ project, groups, tasks }: MindMapProps) {
                 type: 'projectNode',
                 data: { label: project?.title ?? 'Project' },
                 position: { x: 50, y: 200 },
+                selected: selectedNodeId === 'project-root',
             });
 
             const safeGroups = parsedGroups.filter(g => g?.id);
@@ -171,6 +205,7 @@ function MindMapContent({ project, groups, tasks }: MindMapProps) {
                     type: 'groupNode',
                     data: { label: group.title ?? 'Group' },
                     position: { x: 300, y: groupY },
+                    selected: selectedNodeId === group.id,
                 });
                 resultEdges.push({
                     id: `e-proj-${group.id}`,
@@ -188,6 +223,7 @@ function MindMapContent({ project, groups, tasks }: MindMapProps) {
                         type: 'taskNode',
                         data: { label: task.title ?? 'Task', status: task.status ?? 'todo' },
                         position: { x: 520, y: taskYOffset },
+                        selected: selectedNodeId === task.id,
                     });
                     resultEdges.push({
                         id: `e-group-${task.id}`,
@@ -205,6 +241,7 @@ function MindMapContent({ project, groups, tasks }: MindMapProps) {
                             type: 'taskNode',
                             data: { label: child.title ?? 'Subtask', status: child.status ?? 'todo' },
                             position: { x: 720, y: taskYOffset },
+                            selected: selectedNodeId === child.id,
                         });
                         resultEdges.push({
                             id: `e-parent-${child.id}`,
@@ -223,15 +260,122 @@ function MindMapContent({ project, groups, tasks }: MindMapProps) {
         }
 
         return { nodes: resultNodes, edges: resultEdges };
-    }, [projectId, groupsJson, tasksJson, project?.title]);
+    }, [projectId, groupsJson, tasksJson, project?.title, selectedNodeId]);
+
+    // Handle node click to select
+    const handleNodeClick: NodeMouseHandler = useCallback((event, node) => {
+        setSelectedNodeId(node.id);
+    }, []);
+
+    // Handle pane click to deselect
+    const handlePaneClick = useCallback(() => {
+        setSelectedNodeId(null);
+    }, []);
+
+    // KEYBOARD SHORTCUTS
+    const handleKeyDown = useCallback(async (event: React.KeyboardEvent) => {
+        // Skip if focus is on input/textarea
+        const activeElement = document.activeElement;
+        if (activeElement?.tagName === 'INPUT' || activeElement?.tagName === 'TEXTAREA') {
+            return;
+        }
+
+        // Skip if no node selected or no task operations available
+        if (!selectedNodeId || !onCreateTask) return;
+
+        // Skip for project-root and group nodes (only work on task nodes)
+        if (selectedNodeId === 'project-root') return;
+
+        const isGroupNode = groups.some(g => g.id === selectedNodeId);
+
+        switch (event.key) {
+            case 'Tab': {
+                event.preventDefault();
+                event.stopPropagation();
+
+                if (isGroupNode) {
+                    // Tab on group = create new root task in this group
+                    const newTask = await onCreateTask(selectedNodeId, "New Task", null);
+                    if (newTask) {
+                        setSelectedNodeId(newTask.id);
+                    }
+                } else if (selectedTask && selectedGroup) {
+                    // Tab on task = create child task
+                    const newTask = await onCreateTask(selectedGroup.id, "New Subtask", selectedNodeId);
+                    if (newTask) {
+                        setSelectedNodeId(newTask.id);
+                    }
+                }
+                break;
+            }
+
+            case 'Enter': {
+                // Skip if composing (IME)
+                if (event.nativeEvent.isComposing) return;
+
+                event.preventDefault();
+                event.stopPropagation();
+
+                if (isGroupNode) {
+                    // Enter on group = do nothing (or could create new group)
+                    return;
+                }
+
+                if (selectedTask && selectedGroup) {
+                    // Enter = create sibling task (same parent)
+                    const newTask = await onCreateTask(
+                        selectedGroup.id,
+                        "New Task",
+                        selectedTask.parent_task_id // Same parent as current
+                    );
+                    if (newTask) {
+                        setSelectedNodeId(newTask.id);
+                    }
+                }
+                break;
+            }
+
+            case 'Backspace':
+            case 'Delete': {
+                event.preventDefault();
+                event.stopPropagation();
+
+                if (isGroupNode || !onDeleteTask) return;
+
+                // Show confirmation if has children
+                if (selectedNodeHasChildren) {
+                    const confirmed = window.confirm(
+                        '子タスクを含むタスクを削除しますか？\nすべての子タスクも削除されます。'
+                    );
+                    if (!confirmed) return;
+                }
+
+                // Delete the task
+                await onDeleteTask(selectedNodeId);
+                setSelectedNodeId(null);
+                break;
+            }
+
+            case 'Escape': {
+                setSelectedNodeId(null);
+                break;
+            }
+        }
+    }, [selectedNodeId, selectedTask, selectedGroup, selectedNodeHasChildren, groups, onCreateTask, onDeleteTask]);
 
     return (
-        <div className="w-full h-full bg-muted/5">
+        <div
+            className="w-full h-full bg-muted/5"
+            tabIndex={0}
+            onKeyDown={handleKeyDown}
+        >
             <ReactFlow
                 nodes={nodes}
                 edges={edges}
                 nodeTypes={nodeTypes}
                 defaultViewport={defaultViewport}
+                onNodeClick={handleNodeClick}
+                onPaneClick={handlePaneClick}
                 fitView
                 fitViewOptions={{ padding: 0.2 }}
                 deleteKeyCode={null}
@@ -245,6 +389,18 @@ function MindMapContent({ project, groups, tasks }: MindMapProps) {
                 <Background gap={20} size={1} color="hsl(var(--muted-foreground) / 0.1)" />
                 <Controls showInteractive={false} />
             </ReactFlow>
+
+            {/* Keyboard shortcut hint */}
+            {selectedNodeId && selectedNodeId !== 'project-root' && (
+                <div className="absolute bottom-4 left-4 bg-card/90 backdrop-blur border rounded-lg p-2 text-xs text-muted-foreground shadow-lg">
+                    <div className="flex gap-4">
+                        <span><kbd className="px-1 py-0.5 bg-muted rounded text-[10px]">Tab</kbd> 子タスク追加</span>
+                        <span><kbd className="px-1 py-0.5 bg-muted rounded text-[10px]">Enter</kbd> 兄弟タスク追加</span>
+                        <span><kbd className="px-1 py-0.5 bg-muted rounded text-[10px]">Delete</kbd> 削除</span>
+                        <span><kbd className="px-1 py-0.5 bg-muted rounded text-[10px]">Esc</kbd> 選択解除</span>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
