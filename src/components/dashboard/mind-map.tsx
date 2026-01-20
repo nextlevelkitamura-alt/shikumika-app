@@ -1,11 +1,12 @@
 "use client"
 
-import React, { useMemo, useState, useEffect, useCallback, Component, ErrorInfo, ReactNode } from 'react';
+import React, { useMemo, useState, useEffect, useCallback, useRef, Component, ErrorInfo, ReactNode } from 'react';
 import ReactFlow, {
     Node,
     Edge,
     Controls,
     Background,
+    BackgroundVariant,
     Handle,
     Position,
     NodeProps,
@@ -80,17 +81,90 @@ const GroupNode = React.memo(({ data, selected }: NodeProps) => (
 ));
 GroupNode.displayName = 'GroupNode';
 
-const TaskNode = React.memo(({ data, selected }: NodeProps) => (
-    <div className={cn(
-        "w-[130px] px-2 py-1.5 rounded bg-background border text-xs shadow-sm flex items-center gap-1 transition-all",
-        selected && "ring-2 ring-primary ring-offset-1 ring-offset-background border-primary"
-    )}>
-        <Handle type="target" position={Position.Left} className="!bg-muted-foreground/50 !w-1 !h-1" />
-        <div className={cn("w-1.5 h-1.5 rounded-full", data?.status === 'done' ? "bg-primary" : "bg-muted-foreground/30")} />
-        <span className={cn("truncate", data?.status === 'done' && "line-through text-muted-foreground")}>{data?.label ?? 'Task'}</span>
-        <Handle type="source" position={Position.Right} className="!bg-muted-foreground/50 !w-1 !h-1" />
-    </div>
-));
+// Editable Task Node
+const TaskNode = React.memo(({ data, selected }: NodeProps) => {
+    const inputRef = useRef<HTMLInputElement>(null);
+    const [isEditing, setIsEditing] = useState(data?.isEditing ?? false);
+    const [editValue, setEditValue] = useState(data?.label ?? 'Task');
+
+    // Auto-focus when entering edit mode
+    useEffect(() => {
+        if (data?.isEditing && inputRef.current) {
+            inputRef.current.focus();
+            inputRef.current.select();
+            setIsEditing(true);
+            setEditValue(data?.label ?? 'Task');
+        }
+    }, [data?.isEditing, data?.label]);
+
+    const handleBlur = useCallback(() => {
+        setIsEditing(false);
+        if (editValue !== data?.label && data?.onSave) {
+            data.onSave(editValue);
+        }
+        if (data?.onEditEnd) {
+            data.onEditEnd();
+        }
+    }, [editValue, data]);
+
+    const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+        // Stop propagation to prevent MindMap shortcuts
+        e.stopPropagation();
+
+        if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+            e.preventDefault();
+            inputRef.current?.blur();
+        }
+        if (e.key === 'Escape') {
+            setEditValue(data?.label ?? 'Task');
+            setIsEditing(false);
+            if (data?.onEditEnd) {
+                data.onEditEnd();
+            }
+        }
+    }, [data]);
+
+    const handleDoubleClick = useCallback(() => {
+        setIsEditing(true);
+        setEditValue(data?.label ?? 'Task');
+        setTimeout(() => {
+            inputRef.current?.focus();
+            inputRef.current?.select();
+        }, 0);
+    }, [data?.label]);
+
+    return (
+        <div
+            className={cn(
+                "w-[140px] px-2 py-1.5 rounded bg-background border text-xs shadow-sm flex items-center gap-1 transition-all",
+                selected && "ring-2 ring-primary ring-offset-1 ring-offset-background border-primary"
+            )}
+            onDoubleClick={handleDoubleClick}
+        >
+            <Handle type="target" position={Position.Left} className="!bg-muted-foreground/50 !w-1 !h-1" />
+            <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", data?.status === 'done' ? "bg-primary" : "bg-muted-foreground/30")} />
+
+            {isEditing || data?.isEditing ? (
+                <input
+                    ref={inputRef}
+                    type="text"
+                    value={editValue}
+                    onChange={(e) => setEditValue(e.target.value)}
+                    onBlur={handleBlur}
+                    onKeyDown={handleKeyDown}
+                    className="flex-1 bg-transparent border-none text-xs focus:outline-none focus:ring-0 px-0 min-w-0"
+                    autoFocus
+                />
+            ) : (
+                <span className={cn("truncate", data?.status === 'done' && "line-through text-muted-foreground")}>
+                    {data?.label ?? 'Task'}
+                </span>
+            )}
+
+            <Handle type="source" position={Position.Right} className="!bg-muted-foreground/50 !w-1 !h-1" />
+        </div>
+    );
+});
 TaskNode.displayName = 'TaskNode';
 
 const nodeTypes = { projectNode: ProjectNode, groupNode: GroupNode, taskNode: TaskNode };
@@ -109,7 +183,7 @@ interface MindMapProps {
     onMoveTask?: (taskId: string, newGroupId: string) => Promise<void>
 }
 
-function MindMapContent({ project, groups, tasks, onCreateTask, onDeleteTask }: MindMapProps) {
+function MindMapContent({ project, groups, tasks, onCreateTask, onUpdateTask, onDeleteTask }: MindMapProps) {
     const projectId = project?.id ?? '';
     const groupsJson = JSON.stringify(groups?.map(g => ({ id: g?.id, title: g?.title })) ?? []);
     const tasksJson = JSON.stringify(tasks?.map(t => ({
@@ -120,9 +194,10 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onDeleteTask }: 
         parent_task_id: t?.parent_task_id
     })) ?? []);
 
-    // Selected node state for keyboard navigation
+    // State
     const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-    const { setCenter } = useReactFlow();
+    const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
 
     // Get task data for selected node
     const selectedTask = useMemo(() => {
@@ -141,6 +216,22 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onDeleteTask }: 
         if (!selectedNodeId) return false;
         return tasks.some(t => t.parent_task_id === selectedNodeId);
     }, [selectedNodeId, tasks]);
+
+    // Handle save task title
+    const handleSaveTaskTitle = useCallback(async (taskId: string, newTitle: string) => {
+        if (onUpdateTask && newTitle.trim()) {
+            await onUpdateTask(taskId, { title: newTitle.trim() });
+        }
+    }, [onUpdateTask]);
+
+    // Handle edit end
+    const handleEditEnd = useCallback(() => {
+        setEditingNodeId(null);
+        // Re-focus container for keyboard shortcuts
+        setTimeout(() => {
+            containerRef.current?.focus();
+        }, 0);
+    }, []);
 
     // DERIVED STATE: nodes and edges
     const { nodes, edges } = useMemo(() => {
@@ -221,7 +312,13 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onDeleteTask }: 
                     resultNodes.push({
                         id: task.id,
                         type: 'taskNode',
-                        data: { label: task.title ?? 'Task', status: task.status ?? 'todo' },
+                        data: {
+                            label: task.title ?? 'Task',
+                            status: task.status ?? 'todo',
+                            isEditing: editingNodeId === task.id,
+                            onSave: (newTitle: string) => handleSaveTaskTitle(task.id, newTitle),
+                            onEditEnd: handleEditEnd,
+                        },
                         position: { x: 520, y: taskYOffset },
                         selected: selectedNodeId === task.id,
                     });
@@ -239,7 +336,13 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onDeleteTask }: 
                         resultNodes.push({
                             id: child.id,
                             type: 'taskNode',
-                            data: { label: child.title ?? 'Subtask', status: child.status ?? 'todo' },
+                            data: {
+                                label: child.title ?? 'Subtask',
+                                status: child.status ?? 'todo',
+                                isEditing: editingNodeId === child.id,
+                                onSave: (newTitle: string) => handleSaveTaskTitle(child.id, newTitle),
+                                onEditEnd: handleEditEnd,
+                            },
                             position: { x: 720, y: taskYOffset },
                             selected: selectedNodeId === child.id,
                         });
@@ -260,7 +363,7 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onDeleteTask }: 
         }
 
         return { nodes: resultNodes, edges: resultEdges };
-    }, [projectId, groupsJson, tasksJson, project?.title, selectedNodeId]);
+    }, [projectId, groupsJson, tasksJson, project?.title, selectedNodeId, editingNodeId, handleSaveTaskTitle, handleEditEnd]);
 
     // Handle node click to select
     const handleNodeClick: NodeMouseHandler = useCallback((event, node) => {
@@ -270,20 +373,21 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onDeleteTask }: 
     // Handle pane click to deselect
     const handlePaneClick = useCallback(() => {
         setSelectedNodeId(null);
+        setEditingNodeId(null);
     }, []);
 
     // KEYBOARD SHORTCUTS
     const handleKeyDown = useCallback(async (event: React.KeyboardEvent) => {
+        // Skip if currently editing
+        if (editingNodeId) return;
+
         // Skip if focus is on input/textarea
         const activeElement = document.activeElement;
         if (activeElement?.tagName === 'INPUT' || activeElement?.tagName === 'TEXTAREA') {
             return;
         }
 
-        // Skip if no node selected or no task operations available
         if (!selectedNodeId || !onCreateTask) return;
-
-        // Skip for project-root and group nodes (only work on task nodes)
         if (selectedNodeId === 'project-root') return;
 
         const isGroupNode = groups.some(g => g.id === selectedNodeId);
@@ -294,43 +398,48 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onDeleteTask }: 
                 event.stopPropagation();
 
                 if (isGroupNode) {
-                    // Tab on group = create new root task in this group
                     const newTask = await onCreateTask(selectedNodeId, "New Task", null);
                     if (newTask) {
                         setSelectedNodeId(newTask.id);
+                        setEditingNodeId(newTask.id); // Auto-edit mode
                     }
                 } else if (selectedTask && selectedGroup) {
-                    // Tab on task = create child task
                     const newTask = await onCreateTask(selectedGroup.id, "New Subtask", selectedNodeId);
                     if (newTask) {
                         setSelectedNodeId(newTask.id);
+                        setEditingNodeId(newTask.id); // Auto-edit mode
                     }
                 }
                 break;
             }
 
             case 'Enter': {
-                // Skip if composing (IME)
                 if (event.nativeEvent.isComposing) return;
 
                 event.preventDefault();
                 event.stopPropagation();
 
-                if (isGroupNode) {
-                    // Enter on group = do nothing (or could create new group)
-                    return;
-                }
+                if (isGroupNode) return;
 
                 if (selectedTask && selectedGroup) {
-                    // Enter = create sibling task (same parent)
                     const newTask = await onCreateTask(
                         selectedGroup.id,
                         "New Task",
-                        selectedTask.parent_task_id // Same parent as current
+                        selectedTask.parent_task_id
                     );
                     if (newTask) {
                         setSelectedNodeId(newTask.id);
+                        setEditingNodeId(newTask.id); // Auto-edit mode
                     }
+                }
+                break;
+            }
+
+            case 'F2': {
+                // F2 to edit selected node
+                event.preventDefault();
+                if (!isGroupNode && selectedNodeId) {
+                    setEditingNodeId(selectedNodeId);
                 }
                 break;
             }
@@ -342,7 +451,6 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onDeleteTask }: 
 
                 if (isGroupNode || !onDeleteTask) return;
 
-                // Show confirmation if has children
                 if (selectedNodeHasChildren) {
                     const confirmed = window.confirm(
                         '子タスクを含むタスクを削除しますか？\nすべての子タスクも削除されます。'
@@ -350,7 +458,6 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onDeleteTask }: 
                     if (!confirmed) return;
                 }
 
-                // Delete the task
                 await onDeleteTask(selectedNodeId);
                 setSelectedNodeId(null);
                 break;
@@ -358,14 +465,16 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onDeleteTask }: 
 
             case 'Escape': {
                 setSelectedNodeId(null);
+                setEditingNodeId(null);
                 break;
             }
         }
-    }, [selectedNodeId, selectedTask, selectedGroup, selectedNodeHasChildren, groups, onCreateTask, onDeleteTask]);
+    }, [selectedNodeId, selectedTask, selectedGroup, selectedNodeHasChildren, groups, onCreateTask, onDeleteTask, editingNodeId]);
 
     return (
         <div
-            className="w-full h-full bg-muted/5"
+            ref={containerRef}
+            className="w-full h-full bg-muted/5 relative"
             tabIndex={0}
             onKeyDown={handleKeyDown}
         >
@@ -386,18 +495,23 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onDeleteTask }: 
                 minZoom={0.5}
                 maxZoom={1.5}
             >
-                <Background gap={20} size={1} color="hsl(var(--muted-foreground) / 0.1)" />
+                <Background
+                    variant={BackgroundVariant.Dots}
+                    gap={20}
+                    size={1}
+                    color="rgba(255, 255, 255, 0.15)"
+                />
                 <Controls showInteractive={false} />
             </ReactFlow>
 
             {/* Keyboard shortcut hint */}
-            {selectedNodeId && selectedNodeId !== 'project-root' && (
+            {selectedNodeId && selectedNodeId !== 'project-root' && !editingNodeId && (
                 <div className="absolute bottom-4 left-4 bg-card/90 backdrop-blur border rounded-lg p-2 text-xs text-muted-foreground shadow-lg">
                     <div className="flex gap-4">
-                        <span><kbd className="px-1 py-0.5 bg-muted rounded text-[10px]">Tab</kbd> 子タスク追加</span>
-                        <span><kbd className="px-1 py-0.5 bg-muted rounded text-[10px]">Enter</kbd> 兄弟タスク追加</span>
-                        <span><kbd className="px-1 py-0.5 bg-muted rounded text-[10px]">Delete</kbd> 削除</span>
-                        <span><kbd className="px-1 py-0.5 bg-muted rounded text-[10px]">Esc</kbd> 選択解除</span>
+                        <span><kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">Tab</kbd> 子タスク</span>
+                        <span><kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">Enter</kbd> 兄弟タスク</span>
+                        <span><kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">F2</kbd> 編集</span>
+                        <span><kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">Del</kbd> 削除</span>
                     </div>
                 </div>
             )}
