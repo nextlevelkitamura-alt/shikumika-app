@@ -80,14 +80,14 @@ const GroupNode = React.memo(({ data, selected }: NodeProps) => (
 ));
 GroupNode.displayName = 'GroupNode';
 
-// TASK NODE with Xmind-level keyboard control
+// TASK NODE
 const TaskNode = React.memo(({ data, selected }: NodeProps) => {
     const inputRef = useRef<HTMLInputElement>(null);
     const wrapperRef = useRef<HTMLDivElement>(null);
     const [isEditing, setIsEditing] = useState<boolean>(false);
     const [editValue, setEditValue] = useState<string>(data?.label ?? '');
 
-    // Handle external trigger to enter edit mode
+    // Trigger edit from external
     useEffect(() => {
         if (data?.triggerEdit && !isEditing) {
             setIsEditing(true);
@@ -95,30 +95,32 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
         }
     }, [data?.triggerEdit, data?.initialValue, isEditing]);
 
-    // Sync label when not editing
+    // Sync label
     useEffect(() => {
         if (!isEditing) {
             setEditValue(data?.label ?? '');
         }
     }, [data?.label, isEditing]);
 
-    // Auto-focus input when entering edit mode
+    // Auto-focus input
     useEffect(() => {
         if (isEditing && inputRef.current) {
-            inputRef.current.focus();
-            const len = inputRef.current.value.length;
-            inputRef.current.setSelectionRange(len, len);
+            // Use requestAnimationFrame to ensure DOM is ready
+            requestAnimationFrame(() => {
+                inputRef.current?.focus();
+                const len = inputRef.current?.value.length ?? 0;
+                inputRef.current?.setSelectionRange(len, len);
+            });
         }
     }, [isEditing]);
 
-    // Auto-focus wrapper when selected and not editing (for shortcuts)
+    // Auto-focus wrapper when selected
     useEffect(() => {
         if (selected && !isEditing && wrapperRef.current) {
             wrapperRef.current.focus();
         }
     }, [selected, isEditing]);
 
-    // Save current value
     const saveValue = useCallback(async () => {
         const trimmed = editValue.trim() || 'Task';
         if (trimmed !== data?.label && data?.onSave) {
@@ -127,26 +129,29 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
         return trimmed;
     }, [editValue, data]);
 
-    // Exit edit mode and focus wrapper
     const exitEditMode = useCallback(() => {
         setIsEditing(false);
-        setTimeout(() => {
+        requestAnimationFrame(() => {
             wrapperRef.current?.focus();
-        }, 0);
+        });
     }, []);
 
-    // Handle input keydown
     const handleInputKeyDown = useCallback(async (e: React.KeyboardEvent<HTMLInputElement>) => {
         e.stopPropagation();
 
         if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
             e.preventDefault();
             await saveValue();
-            exitEditMode();
+            setIsEditing(false);
+            // Trigger sibling creation
+            if (data?.onAddSibling) {
+                await data.onAddSibling();
+            }
         } else if (e.key === 'Tab') {
             e.preventDefault();
             await saveValue();
             setIsEditing(false);
+            // Trigger child creation
             if (data?.onAddChild) {
                 await data.onAddChild();
             }
@@ -157,7 +162,6 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
         }
     }, [saveValue, exitEditMode, data]);
 
-    // Handle wrapper keydown (View Mode)
     const handleWrapperKeyDown = useCallback(async (e: React.KeyboardEvent<HTMLDivElement>) => {
         if (isEditing) return;
 
@@ -257,66 +261,75 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onUpdateTask, on
         status: t?.status,
         group_id: t?.group_id,
         parent_task_id: t?.parent_task_id,
-        order_index: t?.order_index
+        order_index: t?.order_index,
+        created_at: t?.created_at
     })) ?? []);
 
     // STATE
     const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-    const [lastCreatedTaskId, setLastCreatedTaskId] = useState<string | null>(null);
+    const [pendingEditNodeId, setPendingEditNodeId] = useState<string | null>(null);
 
-    // EFFECT: Focus newly created task
+    // REF: Flag to indicate we're waiting for a new node
+    const isCreatingNodeRef = useRef(false);
+    const prevTaskCountRef = useRef(tasks.length);
+
+    // EFFECT: Detect new task and focus it
     useEffect(() => {
-        if (lastCreatedTaskId) {
-            // Check if the task exists in the current tasks array
-            const taskExists = tasks.some(t => t.id === lastCreatedTaskId);
-            if (taskExists) {
-                setSelectedNodeId(lastCreatedTaskId);
-                // Clear after handling
-                setLastCreatedTaskId(null);
-            }
-        }
-    }, [lastCreatedTaskId, tasks]);
+        const currentCount = tasks.length;
+        const prevCount = prevTaskCountRef.current;
 
-    // Helper functions
+        // Check if a new task was added while we were creating
+        if (isCreatingNodeRef.current && currentCount > prevCount) {
+            // Find the newest task by created_at
+            const newestTask = tasks.reduce((newest, task) => {
+                if (!newest) return task;
+                const newestDate = new Date(newest.created_at).getTime();
+                const taskDate = new Date(task.created_at).getTime();
+                return taskDate > newestDate ? task : newest;
+            }, null as Task | null);
+
+            if (newestTask) {
+                console.log('[MindMap] New task detected, focusing:', newestTask.id);
+                setSelectedNodeId(newestTask.id);
+                setPendingEditNodeId(newestTask.id);
+            }
+
+            // Reset the flag
+            isCreatingNodeRef.current = false;
+        }
+
+        // Update prev count
+        prevTaskCountRef.current = currentCount;
+    }, [tasks]);
+
+    // Clear pending edit after a short delay (so the node can pick it up)
+    useEffect(() => {
+        if (pendingEditNodeId) {
+            const timer = setTimeout(() => {
+                setPendingEditNodeId(null);
+            }, 200);
+            return () => clearTimeout(timer);
+        }
+    }, [pendingEditNodeId]);
+
+    // Helpers
     const getTaskById = useCallback((id: string) => tasks.find(t => t.id === id), [tasks]);
     const getGroupForTask = useCallback((task: Task) => groups.find(g => g.id === task.group_id), [groups]);
     const hasChildren = useCallback((taskId: string) => tasks.some(t => t.parent_task_id === taskId), [tasks]);
 
-    // Get siblings of a task (sorted by order_index)
-    const getSiblings = useCallback((task: Task) => {
-        return tasks
-            .filter(t => t.group_id === task.group_id && t.parent_task_id === task.parent_task_id && t.id !== task.id)
-            .sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0));
-    }, [tasks]);
-
-    // Calculate next focus after deletion
     const calculateNextFocus = useCallback((taskId: string): string | null => {
         const task = getTaskById(taskId);
         if (!task) return null;
 
-        // Get all siblings (including self) sorted by order_index
         const allSiblings = tasks
             .filter(t => t.group_id === task.group_id && t.parent_task_id === task.parent_task_id)
             .sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0));
 
         const currentIndex = allSiblings.findIndex(t => t.id === taskId);
 
-        // Priority 1: Previous sibling
-        if (currentIndex > 0) {
-            return allSiblings[currentIndex - 1].id;
-        }
-
-        // Priority 2: Next sibling
-        if (currentIndex < allSiblings.length - 1) {
-            return allSiblings[currentIndex + 1].id;
-        }
-
-        // Priority 3: Parent (or group if no parent)
-        if (task.parent_task_id) {
-            return task.parent_task_id;
-        }
-
-        // Fallback to group
+        if (currentIndex > 0) return allSiblings[currentIndex - 1].id;
+        if (currentIndex < allSiblings.length - 1) return allSiblings[currentIndex + 1].id;
+        if (task.parent_task_id) return task.parent_task_id;
         return task.group_id;
     }, [tasks, getTaskById]);
 
@@ -327,10 +340,10 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onUpdateTask, on
         const group = getGroupForTask(parentTask);
         if (!group) return;
 
-        const newTask = await onCreateTask(group.id, "", parentTaskId);
-        if (newTask) {
-            setLastCreatedTaskId(newTask.id);
-        }
+        // Set flag BEFORE creating
+        isCreatingNodeRef.current = true;
+
+        await onCreateTask(group.id, "", parentTaskId);
     }, [getTaskById, getGroupForTask, onCreateTask]);
 
     // Add sibling task
@@ -340,29 +353,23 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onUpdateTask, on
         const group = getGroupForTask(task);
         if (!group) return;
 
-        const newTask = await onCreateTask(group.id, "", task.parent_task_id);
-        if (newTask) {
-            setLastCreatedTaskId(newTask.id);
-        }
+        // Set flag BEFORE creating
+        isCreatingNodeRef.current = true;
+
+        await onCreateTask(group.id, "", task.parent_task_id);
     }, [getTaskById, getGroupForTask, onCreateTask]);
 
-    // Delete task with smart focus navigation
+    // Delete task
     const deleteTask = useCallback(async (taskId: string) => {
         if (!onDeleteTask) return;
 
-        // Confirm if has children
         if (hasChildren(taskId)) {
             const confirmed = window.confirm('子タスクを含むタスクを削除しますか？\nすべての子タスクも削除されます。');
             if (!confirmed) return;
         }
 
-        // Calculate next focus BEFORE deleting
         const nextFocusId = calculateNextFocus(taskId);
-
-        // Perform deletion
         await onDeleteTask(taskId);
-
-        // Set focus to calculated next node
         setSelectedNodeId(nextFocusId);
     }, [hasChildren, calculateNextFocus, onDeleteTask]);
 
@@ -373,32 +380,23 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onUpdateTask, on
         }
     }, [onUpdateTask]);
 
-    // Check if lastCreatedTaskId should trigger edit
-    const shouldTriggerEdit = useCallback((taskId: string) => {
-        return lastCreatedTaskId === taskId;
-    }, [lastCreatedTaskId]);
+    // Check if node should trigger edit
+    const shouldTriggerEdit = useCallback((taskId: string) => pendingEditNodeId === taskId, [pendingEditNodeId]);
 
-    // DERIVED STATE: nodes and edges
+    // DERIVED STATE
     const { nodes, edges } = useMemo(() => {
         const resultNodes: Node[] = [];
         const resultEdges: Edge[] = [];
 
-        if (!projectId) {
-            return { nodes: resultNodes, edges: resultEdges };
-        }
+        if (!projectId) return { nodes: resultNodes, edges: resultEdges };
 
         try {
             const parsedGroups = JSON.parse(groupsJson) as { id: string; title: string }[];
             const parsedTasks = JSON.parse(tasksJson) as {
-                id: string;
-                title: string;
-                status: string;
-                group_id: string;
-                parent_task_id: string | null;
-                order_index: number;
+                id: string; title: string; status: string; group_id: string;
+                parent_task_id: string | null; order_index: number; created_at: string;
             }[];
 
-            // Project node
             resultNodes.push({
                 id: 'project-root',
                 type: 'projectNode',
@@ -417,22 +415,17 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onUpdateTask, on
             const childTasksByParent: Record<string, typeof safeTasks> = {};
             for (const task of childTasks) {
                 if (task.parent_task_id) {
-                    if (!childTasksByParent[task.parent_task_id]) {
-                        childTasksByParent[task.parent_task_id] = [];
-                    }
+                    if (!childTasksByParent[task.parent_task_id]) childTasksByParent[task.parent_task_id] = [];
                     childTasksByParent[task.parent_task_id].push(task);
                 }
             }
-            // Sort children by order_index
             for (const key of Object.keys(childTasksByParent)) {
                 childTasksByParent[key].sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0));
             }
 
             const parentTasksByGroup: Record<string, typeof safeTasks> = {};
             for (const task of parentTasks) {
-                if (!parentTasksByGroup[task.group_id]) {
-                    parentTasksByGroup[task.group_id] = [];
-                }
+                if (!parentTasksByGroup[task.group_id]) parentTasksByGroup[task.group_id] = [];
                 parentTasksByGroup[task.group_id].push(task);
             }
 
@@ -448,12 +441,7 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onUpdateTask, on
                     position: { x: 300, y: groupY },
                     selected: selectedNodeId === group.id,
                 });
-                resultEdges.push({
-                    id: `e-proj-${group.id}`,
-                    source: 'project-root',
-                    target: group.id,
-                    type: 'smoothstep',
-                });
+                resultEdges.push({ id: `e-proj-${group.id}`, source: 'project-root', target: group.id, type: 'smoothstep' });
 
                 const groupParentTasks = parentTasksByGroup[group.id] ?? [];
                 let taskYOffset = groupY - 20;
@@ -468,8 +456,8 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onUpdateTask, on
                             label: task.title ?? 'Task',
                             status: task.status ?? 'todo',
                             triggerEdit,
-                            initialValue: triggerEdit ? '' : undefined,
-                            onSave: (newTitle: string) => saveTaskTitle(task.id, newTitle),
+                            initialValue: '',
+                            onSave: (t: string) => saveTaskTitle(task.id, t),
                             onAddChild: () => addChildTask(task.id),
                             onAddSibling: () => addSiblingTask(task.id),
                             onDelete: () => deleteTask(task.id),
@@ -477,17 +465,10 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onUpdateTask, on
                         position: { x: 520, y: taskYOffset },
                         selected: selectedNodeId === task.id,
                     });
-                    resultEdges.push({
-                        id: `e-group-${task.id}`,
-                        source: group.id,
-                        target: task.id,
-                        type: 'smoothstep',
-                    });
-
+                    resultEdges.push({ id: `e-group-${task.id}`, source: group.id, target: task.id, type: 'smoothstep' });
                     taskYOffset += 45;
 
-                    const children = childTasksByParent[task.id] ?? [];
-                    children.forEach((child) => {
+                    (childTasksByParent[task.id] ?? []).forEach((child) => {
                         const triggerChildEdit = shouldTriggerEdit(child.id);
 
                         resultNodes.push({
@@ -497,8 +478,8 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onUpdateTask, on
                                 label: child.title ?? 'Subtask',
                                 status: child.status ?? 'todo',
                                 triggerEdit: triggerChildEdit,
-                                initialValue: triggerChildEdit ? '' : undefined,
-                                onSave: (newTitle: string) => saveTaskTitle(child.id, newTitle),
+                                initialValue: '',
+                                onSave: (t: string) => saveTaskTitle(child.id, t),
                                 onAddChild: () => addChildTask(child.id),
                                 onAddSibling: () => addSiblingTask(child.id),
                                 onDelete: () => deleteTask(child.id),
@@ -506,12 +487,7 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onUpdateTask, on
                             position: { x: 720, y: taskYOffset },
                             selected: selectedNodeId === child.id,
                         });
-                        resultEdges.push({
-                            id: `e-parent-${child.id}`,
-                            source: task.id,
-                            target: child.id,
-                            type: 'smoothstep',
-                        });
+                        resultEdges.push({ id: `e-parent-${child.id}`, source: task.id, target: child.id, type: 'smoothstep' });
                         taskYOffset += 40;
                     });
                 });
@@ -519,46 +495,31 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onUpdateTask, on
                 globalYOffset = Math.max(globalYOffset + 80, taskYOffset + 30);
             });
         } catch (err) {
-            console.error('[MindMap] Error creating nodes:', err);
+            console.error('[MindMap] Error:', err);
         }
 
         return { nodes: resultNodes, edges: resultEdges };
     }, [projectId, groupsJson, tasksJson, project?.title, selectedNodeId, shouldTriggerEdit, saveTaskTitle, addChildTask, addSiblingTask, deleteTask]);
 
-    // Handle node click
-    const handleNodeClick: NodeMouseHandler = useCallback((event, node) => {
-        setSelectedNodeId(node.id);
-    }, []);
+    const handleNodeClick: NodeMouseHandler = useCallback((_, node) => setSelectedNodeId(node.id), []);
+    const handlePaneClick = useCallback(() => setSelectedNodeId(null), []);
 
-    // Handle pane click
-    const handlePaneClick = useCallback(() => {
-        setSelectedNodeId(null);
-    }, []);
-
-    // Container keydown for Group nodes
     const handleContainerKeyDown = useCallback(async (event: React.KeyboardEvent) => {
         if (!selectedNodeId) return;
-
         const isGroupNode = groups.some(g => g.id === selectedNodeId);
         if (!isGroupNode) return;
 
         if (event.key === 'Tab') {
             event.preventDefault();
             if (onCreateTask) {
-                const newTask = await onCreateTask(selectedNodeId, "", null);
-                if (newTask) {
-                    setLastCreatedTaskId(newTask.id);
-                }
+                isCreatingNodeRef.current = true;
+                await onCreateTask(selectedNodeId, "", null);
             }
         }
     }, [selectedNodeId, groups, onCreateTask]);
 
     return (
-        <div
-            className="w-full h-full bg-muted/5 relative outline-none"
-            tabIndex={0}
-            onKeyDown={handleContainerKeyDown}
-        >
+        <div className="w-full h-full bg-muted/5 relative outline-none" tabIndex={0} onKeyDown={handleContainerKeyDown}>
             <ReactFlow
                 nodes={nodes}
                 edges={edges}
@@ -597,10 +558,7 @@ function MindMapContent({ project, groups, tasks, onCreateTask, onUpdateTask, on
 export function MindMap(props: MindMapProps) {
     const [mounted, setMounted] = useState(false);
     useEffect(() => { setMounted(true); }, []);
-
-    if (!mounted) {
-        return <div className="w-full h-full bg-muted/5 flex items-center justify-center text-muted-foreground">Loading...</div>;
-    }
+    if (!mounted) return <div className="w-full h-full bg-muted/5 flex items-center justify-center text-muted-foreground">Loading...</div>;
 
     return (
         <MindMapErrorBoundary>
