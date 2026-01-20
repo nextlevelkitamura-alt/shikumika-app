@@ -167,16 +167,32 @@ const GroupNode = React.memo(({ data, selected }: NodeProps) => {
 
     const handleInputKeyDown = useCallback(async (e: React.KeyboardEvent<HTMLInputElement>) => {
         e.stopPropagation();
-        if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+        if (e.key === 'Tab') {
             e.preventDefault();
             await saveValue();
             setIsEditing(false);
+            if (data?.onAddChild) {
+                // Add child to group (treat as adding task to this group)
+                await data.onAddChild();
+            }
+        } else if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+            e.preventDefault();
+            await saveValue();
+            setIsEditing(false);
+            // Focus wrapper handled by useEffect/exitEditMode logic if we had it,
+            // but for GroupNode we just let isEditing=false render the div which will need focus.
+            requestAnimationFrame(() => {
+                wrapperRef.current?.focus();
+            });
         } else if (e.key === 'Escape') {
             e.preventDefault();
             setEditValue(data?.label ?? '');
             setIsEditing(false);
+            requestAnimationFrame(() => {
+                wrapperRef.current?.focus();
+            });
         }
-    }, [saveValue, data?.label]);
+    }, [saveValue, data, setIsEditing]);
 
     const handleWrapperKeyDown = useCallback(async (e: React.KeyboardEvent<HTMLDivElement>) => {
         if (isEditing) return;
@@ -299,22 +315,17 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
     const handleInputKeyDown = useCallback(async (e: React.KeyboardEvent<HTMLInputElement>) => {
         e.stopPropagation();
 
-        if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+        if (e.key === 'Tab') {
             e.preventDefault();
             await saveValue();
             setIsEditing(false);
-            // Trigger sibling creation
-            if (data?.onAddSibling) {
-                await data.onAddSibling();
-            }
-        } else if (e.key === 'Tab') {
-            e.preventDefault();
-            await saveValue();
-            setIsEditing(false);
-            // Trigger child creation
             if (data?.onAddChild) {
                 await data.onAddChild();
             }
+        } else if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+            e.preventDefault();
+            await saveValue();
+            exitEditMode();
         } else if (e.key === 'Escape') {
             e.preventDefault();
             setEditValue(data?.label ?? '');
@@ -429,73 +440,14 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
     const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
     const [pendingEditNodeId, setPendingEditNodeId] = useState<string | null>(null);
 
-    // REF: Flag to indicate we're waiting for a new node
-    const isCreatingNodeRef = useRef(false);
-    const prevTaskCountRef = useRef(tasks.length);
-
-    // REF: Focus queue - persists through dagre re-layouts
-    const focusQueueRef = useRef<string | null>(null);
-    const focusAttemptRef = useRef(0);
 
     // EFFECT: Detect new task and queue focus
-    useEffect(() => {
-        const currentCount = tasks.length;
-        const prevCount = prevTaskCountRef.current;
+    // Focus Queue with Ref (Client-side strict focus management)
+    const nextFocusTargetId = useRef<string | null>(null);
+    const focusTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-        // Check if a new task was added while we were creating
-        if (isCreatingNodeRef.current && currentCount > prevCount) {
-            // Find the newest task by created_at
-            const newestTask = tasks.reduce((newest, task) => {
-                if (!newest) return task;
-                const newestDate = new Date(newest.created_at).getTime();
-                const taskDate = new Date(task.created_at).getTime();
-                return taskDate > newestDate ? task : newest;
-            }, null as Task | null);
 
-            if (newestTask) {
-                console.log('[MindMap] New task detected, queuing focus:', newestTask.id);
-                // Queue for focus - this persists through dagre re-layout
-                focusQueueRef.current = newestTask.id;
-                focusAttemptRef.current = 0;
-                setSelectedNodeId(newestTask.id);
-                setPendingEditNodeId(newestTask.id);
-            }
 
-            // Reset the flag
-            isCreatingNodeRef.current = false;
-        }
-
-        // Update prev count
-        prevTaskCountRef.current = currentCount;
-    }, [tasks]);
-
-    // EFFECT: Restore focus after dagre layout (triggered by pendingEditNodeId)
-    useEffect(() => {
-        if (pendingEditNodeId && focusQueueRef.current) {
-            // Wait for dagre layout to complete, then trigger focus
-            const timer = setTimeout(() => {
-                // Re-set pendingEditNodeId to trigger TaskNode's triggerEdit
-                if (focusQueueRef.current && focusAttemptRef.current < 3) {
-                    focusAttemptRef.current++;
-                    setPendingEditNodeId(focusQueueRef.current);
-                }
-            }, 50);
-
-            return () => clearTimeout(timer);
-        }
-    }, [pendingEditNodeId]);
-
-    // EFFECT: Clear focus queue after successful focus (longer timeout)
-    useEffect(() => {
-        if (pendingEditNodeId) {
-            const timer = setTimeout(() => {
-                focusQueueRef.current = null;
-                focusAttemptRef.current = 0;
-                setPendingEditNodeId(null);
-            }, 500);
-            return () => clearTimeout(timer);
-        }
-    }, [pendingEditNodeId]);
 
     // Helpers
     const getTaskById = useCallback((id: string) => tasks.find(t => t.id === id), [tasks]);
@@ -525,10 +477,14 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
         const group = getGroupForTask(parentTask);
         if (!group) return;
 
-        // Set flag BEFORE creating
-        isCreatingNodeRef.current = true;
+        // Create task and get ID (Optimistic)
+        const newTask = await onCreateTask(group.id, "", parentTaskId);
 
-        await onCreateTask(group.id, "", parentTaskId);
+        // Queue focus strictly
+        if (newTask) {
+            nextFocusTargetId.current = newTask.id;
+            setSelectedNodeId(newTask.id); // Set selection immediately
+        }
     }, [getTaskById, getGroupForTask, onCreateTask]);
 
     // Add sibling task
@@ -538,10 +494,14 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
         const group = getGroupForTask(task);
         if (!group) return;
 
-        // Set flag BEFORE creating
-        isCreatingNodeRef.current = true;
+        // Create task and get ID (Optimistic)
+        const newTask = await onCreateTask(group.id, "", task.parent_task_id);
 
-        await onCreateTask(group.id, "", task.parent_task_id);
+        // Queue focus strictly
+        if (newTask) {
+            nextFocusTargetId.current = newTask.id;
+            setSelectedNodeId(newTask.id); // Set selection immediately
+        }
     }, [getTaskById, getGroupForTask, onCreateTask]);
 
     // Delete task
@@ -698,6 +658,29 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
         return getLayoutedElements(resultNodes, resultEdges);
     }, [projectId, groupsJson, tasksJson, project?.title, selectedNodeId, shouldTriggerEdit, saveTaskTitle, addChildTask, addSiblingTask, deleteTask, onUpdateGroupTitle, onDeleteGroup]);
 
+    // Force Focus Hook: Triggered after DAGRE layout updates (nodes dependency)
+    useEffect(() => {
+        if (nextFocusTargetId.current) {
+            const nodeId = nextFocusTargetId.current;
+
+            // Clear any pending timeout
+            if (focusTimeoutRef.current) clearTimeout(focusTimeoutRef.current);
+
+            // Wait for DOM paint and Dagre alignment
+            focusTimeoutRef.current = setTimeout(() => {
+                const nodeInput = document.querySelector(`[data-id="${nodeId}"] input`) as HTMLInputElement;
+                if (nodeInput) {
+                    nodeInput.focus();
+                    setPendingEditNodeId(nodeId);
+                    nextFocusTargetId.current = null; // Consume queue
+                }
+            }, 50);
+        }
+        return () => {
+            if (focusTimeoutRef.current) clearTimeout(focusTimeoutRef.current);
+        };
+    }, [nodes]);
+
     const handleNodeClick: NodeMouseHandler = useCallback((_, node) => setSelectedNodeId(node.id), []);
     const handlePaneClick = useCallback(() => setSelectedNodeId(null), []);
 
@@ -709,8 +692,12 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
         if (event.key === 'Tab') {
             event.preventDefault();
             if (onCreateTask) {
-                isCreatingNodeRef.current = true;
-                await onCreateTask(selectedNodeId, "", null);
+                // Create task from group context
+                const newTask = await onCreateTask(selectedNodeId, "", null);
+                if (newTask) {
+                    nextFocusTargetId.current = newTask.id;
+                    setSelectedNodeId(newTask.id);
+                }
             }
         } else if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
             // Create new group when Enter is pressed on a group node
