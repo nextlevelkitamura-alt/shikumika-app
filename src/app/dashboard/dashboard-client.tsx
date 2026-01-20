@@ -176,7 +176,9 @@ function DashboardContent({
         history.record(action);
     }, [currentTasks, deleteTask, createTask, history]);
 
-    // Wrapped updateTask with history recording
+    // DISABLED: updateTaskWithHistory was causing excessive re-renders due to currentTasks dependency
+    // This broke text input functionality - using direct updateTask instead
+    /*
     const updateTaskWithHistory = useCallback(async (taskId: string, updates: Partial<Task>) => {
         const taskBefore = currentTasks.find(t => t.id === taskId);
         if (!taskBefore) return;
@@ -197,6 +199,8 @@ function DashboardContent({
         };
         history.record(action);
     }, [currentTasks, updateTask, history]);
+    */
+
 
     // STABLE handlers using useCallback
     const handleCreateGroup = useCallback(async (title: string) => {
@@ -295,7 +299,7 @@ function DashboardContent({
                         onCreateGroup={handleCreateGroup}
                         onDeleteGroup={handleDeleteGroup}
                         onCreateTask={createTaskWithHistory}
-                        onUpdateTask={updateTaskWithHistory}
+                        onUpdateTask={updateTask}
                         onDeleteTask={deleteTaskWithHistory}
                         onMoveTask={moveTask}
                     />
