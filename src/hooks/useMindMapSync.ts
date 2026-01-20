@@ -97,31 +97,70 @@ export function useMindMapSync({
     }, [supabase])
 
     // --- Task Operations ---
-    const createTask = useCallback(async (groupId: string, title: string = "New Task", parentTaskId: string | null = null) => {
-        try {
-            const groupTasks = tasks.filter(t => t.group_id === groupId)
-            const maxOrder = groupTasks.length > 0 ? Math.max(...groupTasks.map(t => t.order_index ?? 0)) + 1 : 0
+    // OPTIMISTIC UI: Generate client-side UUID and update local state immediately
+    const createTask = useCallback(async (groupId: string, title: string = "New Task", parentTaskId: string | null = null): Promise<Task | null> => {
+        // Generate client-side UUID for instant feedback
+        const optimisticId = crypto.randomUUID();
+        const now = new Date().toISOString();
 
-            const { data, error } = await supabase.from('tasks').insert({
-                user_id: userId,
-                group_id: groupId,
-                parent_task_id: parentTaskId,
-                title,
-                status: 'todo',
-                priority: 3,
-                order_index: maxOrder,
-                actual_time_minutes: 0,
-                estimated_time: 0
-            }).select().single()
+        const groupTasks = tasks.filter(t => t.group_id === groupId);
+        const maxOrder = groupTasks.length > 0 ? Math.max(...groupTasks.map(t => t.order_index ?? 0)) + 1 : 0;
 
-            if (error) throw error
-            if (data) setTasks(prev => [...prev, data])
-            return data
-        } catch (e) {
-            console.error('[Sync] createTask failed:', e)
-            return null
-        }
-    }, [userId, tasks, supabase])
+        // Create optimistic task object
+        const optimisticTask: Task = {
+            id: optimisticId,
+            user_id: userId,
+            group_id: groupId,
+            parent_task_id: parentTaskId,
+            title,
+            status: 'todo',
+            priority: 3,
+            order_index: maxOrder,
+            scheduled_at: null,
+            estimated_time: 0,
+            actual_time_minutes: 0,
+            google_event_id: null,
+            created_at: now,
+        };
+
+        // IMMEDIATELY update local state (Optimistic Update)
+        setTasks(prev => [...prev, optimisticTask]);
+
+        // Return optimistic task immediately for instant focus
+        // Background sync to Supabase
+        (async () => {
+            try {
+                const { data, error } = await supabase.from('tasks').insert({
+                    id: optimisticId, // Use the same ID we generated
+                    user_id: userId,
+                    group_id: groupId,
+                    parent_task_id: parentTaskId,
+                    title,
+                    status: 'todo',
+                    priority: 3,
+                    order_index: maxOrder,
+                    actual_time_minutes: 0,
+                    estimated_time: 0
+                }).select().single();
+
+                if (error) {
+                    throw error;
+                }
+
+                // Update with server response (in case of any server-side modifications)
+                if (data) {
+                    setTasks(prev => prev.map(t => t.id === optimisticId ? data : t));
+                }
+            } catch (e) {
+                console.error('[Sync] createTask failed, rolling back:', e);
+                // ROLLBACK: Remove the optimistic task
+                setTasks(prev => prev.filter(t => t.id !== optimisticId));
+                alert('タスクの作成に失敗しました。もう一度お試しください。');
+            }
+        })();
+
+        return optimisticTask;
+    }, [userId, tasks, supabase]);
 
     const updateTask = useCallback(async (taskId: string, updates: Partial<Task>) => {
         setTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...updates } : t))
