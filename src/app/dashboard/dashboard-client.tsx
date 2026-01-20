@@ -7,7 +7,7 @@ import { RightSidebar } from "@/components/dashboard/right-sidebar"
 import { Database } from "@/types/database"
 import { useMindMapSync } from "@/hooks/useMindMapSync"
 import { TimerProvider } from "@/contexts/TimerContext"
-import { HistoryProvider, useHistory } from "@/contexts/HistoryContext"
+import { HistoryProvider, useHistory, HistoryAction } from "@/contexts/HistoryContext"
 
 type Goal = Database['public']['Tables']['goals']['Row']
 type Project = Database['public']['Tables']['projects']['Row']
@@ -42,7 +42,7 @@ function UndoRedoHandler() {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [history]);
 
-    return null; // This component only handles keyboard events
+    return null;
 }
 
 interface DashboardClientProps {
@@ -53,13 +53,26 @@ interface DashboardClientProps {
     userId: string
 }
 
-export function DashboardClient({
+// Wrapper component that provides HistoryProvider
+export function DashboardClient(props: DashboardClientProps) {
+    return (
+        <HistoryProvider>
+            <UndoRedoHandler />
+            <DashboardContent {...props} />
+        </HistoryProvider>
+    )
+}
+
+// Main content component (inside HistoryProvider, can use useHistory)
+function DashboardContent({
     initialGoals,
     initialProjects,
     initialGroups,
     initialTasks,
     userId
 }: DashboardClientProps) {
+    const history = useHistory();
+
     // State
     const [goals] = useState<Goal[]>(initialGoals)
     const [projects] = useState<Project[]>(initialProjects)
@@ -78,7 +91,7 @@ export function DashboardClient({
         [projects, selectedGoalId]
     )
 
-    // Auto-select first project when goal changes (NOTE: deps are primitives only)
+    // Auto-select first project when goal changes
     useEffect(() => {
         if (selectedGoalId) {
             const projectsInGoal = projects.filter(p => p.goal_id === selectedGoalId)
@@ -88,7 +101,7 @@ export function DashboardClient({
                 setSelectedProjectId(null)
             }
         }
-    }, [selectedGoalId]) // ONLY depends on selectedGoalId, not objects
+    }, [selectedGoalId])
 
     const selectedProject = useMemo(() =>
         projects.find(p => p.id === selectedProjectId),
@@ -96,13 +109,11 @@ export function DashboardClient({
     )
 
     // --- MindMap Sync Hook ---
-    // STABLE reference for initial groups using useMemo with string dep
     const projectGroupsInitial = useMemo(() =>
         initialGroups.filter(g => g.project_id === selectedProjectId),
         [initialGroups, selectedProjectId]
     )
 
-    // STABLE reference for initial tasks - useMemo
     const projectTasksInitial = useMemo(() => {
         const groupIds = new Set(projectGroupsInitial.map(g => g.id))
         return initialTasks.filter(t => groupIds.has(t.group_id))
@@ -125,6 +136,67 @@ export function DashboardClient({
         initialGroups: projectGroupsInitial,
         initialTasks: projectTasksInitial
     })
+
+    // === HISTORY-WRAPPED CRUD FUNCTIONS ===
+
+    // Wrapped createTask with history recording
+    const createTaskWithHistory = useCallback(async (groupId: string, title?: string, parentTaskId?: string | null): Promise<Task | null> => {
+        const newTask = await createTask(groupId, title, parentTaskId);
+        if (newTask) {
+            const action: HistoryAction = {
+                type: 'CREATE_TASK',
+                description: `タスク「${newTask.title}」を作成`,
+                execute: async () => { await createTask(groupId, title, parentTaskId); },
+                reverse: async () => { await deleteTask(newTask.id); }
+            };
+            history.record(action);
+        }
+        return newTask;
+    }, [createTask, deleteTask, history]);
+
+    // Wrapped deleteTask with history recording
+    const deleteTaskWithHistory = useCallback(async (taskId: string) => {
+        const taskToDelete = currentTasks.find(t => t.id === taskId);
+        if (!taskToDelete) return;
+
+        // Store task data for undo
+        const taskData = { ...taskToDelete };
+
+        await deleteTask(taskId);
+
+        const action: HistoryAction = {
+            type: 'DELETE_TASK',
+            description: `タスク「${taskData.title}」を削除`,
+            execute: async () => { await deleteTask(taskId); },
+            reverse: async () => {
+                // Re-create the task with original data
+                await createTask(taskData.group_id, taskData.title ?? '', taskData.parent_task_id);
+            }
+        };
+        history.record(action);
+    }, [currentTasks, deleteTask, createTask, history]);
+
+    // Wrapped updateTask with history recording
+    const updateTaskWithHistory = useCallback(async (taskId: string, updates: Partial<Task>) => {
+        const taskBefore = currentTasks.find(t => t.id === taskId);
+        if (!taskBefore) return;
+
+        // Store old values for undo
+        const oldValues: Partial<Task> = {};
+        for (const key of Object.keys(updates) as (keyof Task)[]) {
+            oldValues[key] = taskBefore[key] as any;
+        }
+
+        await updateTask(taskId, updates);
+
+        const action: HistoryAction = {
+            type: 'UPDATE_TASK',
+            description: `タスクを更新`,
+            execute: async () => { await updateTask(taskId, updates); },
+            reverse: async () => { await updateTask(taskId, oldValues); }
+        };
+        history.record(action);
+    }, [currentTasks, updateTask, history]);
 
     // STABLE handlers using useCallback
     const handleCreateGroup = useCallback(async (title: string) => {
@@ -188,66 +260,63 @@ export function DashboardClient({
     }, [])
 
     return (
-        <HistoryProvider>
-            <UndoRedoHandler />
-            <TimerProvider tasks={currentTasks} onUpdateTask={updateTask}>
-                <div className="flex h-full w-full">
-                    {/* Pane 1: Left Sidebar */}
-                    <div
-                        className="hidden md:flex flex-none overflow-hidden h-full"
-                        style={{ width: leftSidebarWidth }}
-                    >
-                        <LeftSidebar
-                            goals={goals}
-                            selectedGoalId={selectedGoalId}
-                            onSelectGoal={setSelectedGoalId}
-                            projects={filteredProjects}
-                            selectedProjectId={selectedProjectId}
-                            onSelectProject={setSelectedProjectId}
-                        />
-                    </div>
-
-                    {/* Left Resize Handle */}
-                    <div
-                        className="hidden md:flex w-1 h-full bg-border hover:bg-primary/50 cursor-col-resize transition-colors flex-none items-center justify-center group"
-                        onMouseDown={handleLeftMouseDown}
-                    >
-                        <div className="w-0.5 h-8 bg-muted-foreground/20 group-hover:bg-primary rounded-full" />
-                    </div>
-
-                    {/* Pane 2: Center (MindMap + Lists) */}
-                    <div className="flex-1 min-w-0 overflow-hidden h-full">
-                        <CenterPane
-                            project={selectedProject}
-                            groups={currentGroups}
-                            tasks={currentTasks}
-                            onUpdateGroupTitle={handleUpdateGroupTitle}
-                            onCreateGroup={handleCreateGroup}
-                            onDeleteGroup={handleDeleteGroup}
-                            onCreateTask={createTask}
-                            onUpdateTask={updateTask}
-                            onDeleteTask={deleteTask}
-                            onMoveTask={moveTask}
-                        />
-                    </div>
-
-                    {/* Right Resize Handle */}
-                    <div
-                        className="hidden lg:flex w-1 h-full bg-border hover:bg-primary/50 cursor-col-resize transition-colors flex-none items-center justify-center group"
-                        onMouseDown={handleRightMouseDown}
-                    >
-                        <div className="w-0.5 h-8 bg-muted-foreground/20 group-hover:bg-primary rounded-full" />
-                    </div>
-
-                    {/* Pane 3: Right Sidebar (Calendar) */}
-                    <div
-                        className="hidden lg:block flex-none overflow-hidden h-full"
-                        style={{ width: rightSidebarWidth }}
-                    >
-                        <RightSidebar />
-                    </div>
+        <TimerProvider tasks={currentTasks} onUpdateTask={updateTask}>
+            <div className="flex h-full w-full">
+                {/* Pane 1: Left Sidebar */}
+                <div
+                    className="hidden md:flex flex-none overflow-hidden h-full"
+                    style={{ width: leftSidebarWidth }}
+                >
+                    <LeftSidebar
+                        goals={goals}
+                        selectedGoalId={selectedGoalId}
+                        onSelectGoal={setSelectedGoalId}
+                        projects={filteredProjects}
+                        selectedProjectId={selectedProjectId}
+                        onSelectProject={setSelectedProjectId}
+                    />
                 </div>
-            </TimerProvider>
-        </HistoryProvider>
+
+                {/* Left Resize Handle */}
+                <div
+                    className="hidden md:flex w-1 h-full bg-border hover:bg-primary/50 cursor-col-resize transition-colors flex-none items-center justify-center group"
+                    onMouseDown={handleLeftMouseDown}
+                >
+                    <div className="w-0.5 h-8 bg-muted-foreground/20 group-hover:bg-primary rounded-full" />
+                </div>
+
+                {/* Pane 2: Center (MindMap + Lists) */}
+                <div className="flex-1 min-w-0 overflow-hidden h-full">
+                    <CenterPane
+                        project={selectedProject}
+                        groups={currentGroups}
+                        tasks={currentTasks}
+                        onUpdateGroupTitle={handleUpdateGroupTitle}
+                        onCreateGroup={handleCreateGroup}
+                        onDeleteGroup={handleDeleteGroup}
+                        onCreateTask={createTaskWithHistory}
+                        onUpdateTask={updateTaskWithHistory}
+                        onDeleteTask={deleteTaskWithHistory}
+                        onMoveTask={moveTask}
+                    />
+                </div>
+
+                {/* Right Resize Handle */}
+                <div
+                    className="hidden lg:flex w-1 h-full bg-border hover:bg-primary/50 cursor-col-resize transition-colors flex-none items-center justify-center group"
+                    onMouseDown={handleRightMouseDown}
+                >
+                    <div className="w-0.5 h-8 bg-muted-foreground/20 group-hover:bg-primary rounded-full" />
+                </div>
+
+                {/* Pane 3: Right Sidebar (Calendar) */}
+                <div
+                    className="hidden lg:block flex-none overflow-hidden h-full"
+                    style={{ width: rightSidebarWidth }}
+                >
+                    <RightSidebar />
+                </div>
+            </div>
+        </TimerProvider>
     )
 }
