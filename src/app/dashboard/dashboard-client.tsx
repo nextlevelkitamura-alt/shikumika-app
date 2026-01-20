@@ -7,11 +7,43 @@ import { RightSidebar } from "@/components/dashboard/right-sidebar"
 import { Database } from "@/types/database"
 import { useMindMapSync } from "@/hooks/useMindMapSync"
 import { TimerProvider } from "@/contexts/TimerContext"
+import { HistoryProvider, useHistory } from "@/contexts/HistoryContext"
 
 type Goal = Database['public']['Tables']['goals']['Row']
 type Project = Database['public']['Tables']['projects']['Row']
 type TaskGroup = Database['public']['Tables']['task_groups']['Row']
 type Task = Database['public']['Tables']['tasks']['Row']
+
+// Keyboard shortcut handler for Undo/Redo (must be inside HistoryProvider)
+function UndoRedoHandler() {
+    const history = useHistory();
+
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // Skip if in input/textarea (let browser handle standard undo)
+            const target = e.target as HTMLElement;
+            if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+                return;
+            }
+
+            // Cmd+Z (Mac) or Ctrl+Z (Windows) for Undo
+            if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
+                e.preventDefault();
+                history.undo();
+            }
+            // Cmd+Shift+Z (Mac) or Ctrl+Y or Ctrl+Shift+Z (Windows) for Redo
+            else if ((e.metaKey || e.ctrlKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+                e.preventDefault();
+                history.redo();
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [history]);
+
+    return null; // This component only handles keyboard events
+}
 
 interface DashboardClientProps {
     initialGoals: Goal[]
@@ -156,64 +188,66 @@ export function DashboardClient({
     }, [])
 
     return (
-        <TimerProvider tasks={currentTasks} onUpdateTask={updateTask}>
-            <div className="flex h-full w-full">
-                {/* Pane 1: Left Sidebar */}
-                <div
-                    className="hidden md:flex flex-none overflow-hidden h-full"
-                    style={{ width: leftSidebarWidth }}
-                >
-                    <LeftSidebar
-                        goals={goals}
-                        selectedGoalId={selectedGoalId}
-                        onSelectGoal={setSelectedGoalId}
-                        projects={filteredProjects}
-                        selectedProjectId={selectedProjectId}
-                        onSelectProject={setSelectedProjectId}
-                    />
-                </div>
+        <HistoryProvider>
+            <UndoRedoHandler />
+            <TimerProvider tasks={currentTasks} onUpdateTask={updateTask}>
+                <div className="flex h-full w-full">
+                    {/* Pane 1: Left Sidebar */}
+                    <div
+                        className="hidden md:flex flex-none overflow-hidden h-full"
+                        style={{ width: leftSidebarWidth }}
+                    >
+                        <LeftSidebar
+                            goals={goals}
+                            selectedGoalId={selectedGoalId}
+                            onSelectGoal={setSelectedGoalId}
+                            projects={filteredProjects}
+                            selectedProjectId={selectedProjectId}
+                            onSelectProject={setSelectedProjectId}
+                        />
+                    </div>
 
-                {/* Left Resize Handle */}
-                <div
-                    className="hidden md:flex w-1 h-full bg-border hover:bg-primary/50 cursor-col-resize transition-colors flex-none items-center justify-center group"
-                    onMouseDown={handleLeftMouseDown}
-                >
-                    <div className="w-0.5 h-8 bg-muted-foreground/20 group-hover:bg-primary rounded-full" />
-                </div>
+                    {/* Left Resize Handle */}
+                    <div
+                        className="hidden md:flex w-1 h-full bg-border hover:bg-primary/50 cursor-col-resize transition-colors flex-none items-center justify-center group"
+                        onMouseDown={handleLeftMouseDown}
+                    >
+                        <div className="w-0.5 h-8 bg-muted-foreground/20 group-hover:bg-primary rounded-full" />
+                    </div>
 
-                {/* Pane 2: Center (MindMap + Lists) */}
-                <div className="flex-1 min-w-0 overflow-hidden h-full">
-                    <CenterPane
-                        project={selectedProject}
-                        groups={currentGroups}
-                        tasks={currentTasks}
-                        onUpdateGroupTitle={handleUpdateGroupTitle}
-                        onCreateGroup={handleCreateGroup}
-                        onDeleteGroup={handleDeleteGroup}
-                        onCreateTask={createTask}
-                        onUpdateTask={updateTask}
-                        onDeleteTask={deleteTask}
-                        onMoveTask={moveTask}
-                    />
-                </div>
+                    {/* Pane 2: Center (MindMap + Lists) */}
+                    <div className="flex-1 min-w-0 overflow-hidden h-full">
+                        <CenterPane
+                            project={selectedProject}
+                            groups={currentGroups}
+                            tasks={currentTasks}
+                            onUpdateGroupTitle={handleUpdateGroupTitle}
+                            onCreateGroup={handleCreateGroup}
+                            onDeleteGroup={handleDeleteGroup}
+                            onCreateTask={createTask}
+                            onUpdateTask={updateTask}
+                            onDeleteTask={deleteTask}
+                            onMoveTask={moveTask}
+                        />
+                    </div>
 
-                {/* Right Resize Handle */}
-                <div
-                    className="hidden lg:flex w-1 h-full bg-border hover:bg-primary/50 cursor-col-resize transition-colors flex-none items-center justify-center group"
-                    onMouseDown={handleRightMouseDown}
-                >
-                    <div className="w-0.5 h-8 bg-muted-foreground/20 group-hover:bg-primary rounded-full" />
-                </div>
+                    {/* Right Resize Handle */}
+                    <div
+                        className="hidden lg:flex w-1 h-full bg-border hover:bg-primary/50 cursor-col-resize transition-colors flex-none items-center justify-center group"
+                        onMouseDown={handleRightMouseDown}
+                    >
+                        <div className="w-0.5 h-8 bg-muted-foreground/20 group-hover:bg-primary rounded-full" />
+                    </div>
 
-                {/* Pane 3: Right Sidebar (Calendar) */}
-                <div
-                    className="hidden lg:block flex-none overflow-hidden h-full"
-                    style={{ width: rightSidebarWidth }}
-                >
-                    <RightSidebar />
+                    {/* Pane 3: Right Sidebar (Calendar) */}
+                    <div
+                        className="hidden lg:block flex-none overflow-hidden h-full"
+                        style={{ width: rightSidebarWidth }}
+                    >
+                        <RightSidebar />
+                    </div>
                 </div>
-            </div>
-        </TimerProvider>
+            </TimerProvider>
+        </HistoryProvider>
     )
 }
-
