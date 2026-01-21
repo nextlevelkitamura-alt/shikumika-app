@@ -385,11 +385,27 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
         }
     }, [selected, isEditing]);
 
+    // Debounce timer for delayed Supabase save (1.5s)
+    const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
+
     const saveValue = useCallback(async () => {
         const trimmed = editValue.trim() || 'Task';
-        if (trimmed !== data?.label && data?.onSave) {
-            await data.onSave(trimmed);
+
+        // Clear any existing save timer
+        if (saveTimerRef.current) {
+            clearTimeout(saveTimerRef.current);
         }
+
+        // Debounced save: wait 1.5s before sending to Supabase
+        // This prioritizes UI responsiveness over immediate persistence
+        if (trimmed !== data?.label && data?.onSave) {
+            saveTimerRef.current = setTimeout(async () => {
+                console.log('[TaskNode] Debounced save triggered for:', trimmed);
+                await data.onSave(trimmed);
+                saveTimerRef.current = null;
+            }, 1500);
+        }
+
         return trimmed;
     }, [editValue, data]);
 
