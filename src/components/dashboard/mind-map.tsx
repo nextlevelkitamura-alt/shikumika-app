@@ -388,14 +388,28 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
 
         if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
             // Xmind Protocol: Edit+Enter = Confirm and return to Select Mode
-            e.preventDefault();
-            await saveValue();
-            exitEditMode();
-        } else if (e.key === 'Tab') {
-            // Xmind Protocol: Edit+Tab = Confirm + Create Child (combo action)
+            // CRITICAL: Immediate focus return for 2-press sibling creation
             e.preventDefault();
             await saveValue();
             setIsEditing(false);
+
+            // Immediate synchronous focus to wrapper for instant Select Mode
+            // This ensures 2nd Enter press immediately creates sibling
+            if (wrapperRef.current) {
+                wrapperRef.current.focus();
+            }
+            // Fallback with setTimeout(0) to ensure focus even if sync fails
+            setTimeout(() => {
+                if (wrapperRef.current && !isEditing) {
+                    wrapperRef.current.focus();
+                }
+            }, 0);
+        } else if (e.key === 'Tab') {
+            // Xmind Protocol: Edit+Tab = Confirm + Create Child (instant combo)
+            e.preventDefault();
+            await saveValue();
+            setIsEditing(false);
+            // Child creation triggers automatic focus via focusNodeWithPolling
             if (data?.onAddChild) {
                 await data.onAddChild();
             }
@@ -404,7 +418,7 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
             setEditValue(data?.label ?? '');
             exitEditMode();
         }
-    }, [saveValue, exitEditMode, data]);
+    }, [saveValue, exitEditMode, data, isEditing]);
 
     const handleWrapperKeyDown = useCallback(async (e: React.KeyboardEvent<HTMLDivElement>) => {
         if (isEditing) return;
