@@ -646,11 +646,13 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
 
     // HELPER: Persistent DOM polling using setInterval (V2)
     // Ensures focus is captured even if React renders are delayed
-    const focusNodeWithPollingV2 = useCallback((targetId: string, maxDuration: number = 500) => {
+    // CRITICAL: Waits for input element to appear (new nodes need time to enter edit mode)
+    const focusNodeWithPollingV2 = useCallback((targetId: string, maxDuration: number = 500, preferInput: boolean = true) => {
         const startTime = Date.now();
         const pollingInterval = 10; // 10ms loop
+        const inputWaitThreshold = 300; // Wait up to 300ms for input before settling for wrapper
 
-        console.log('[MindMap] Starting persistent focus polling V2 for:', targetId);
+        console.log('[MindMap] Starting persistent focus polling V2 for:', targetId, 'preferInput:', preferInput);
 
         const timer = setInterval(() => {
             const elapsed = Date.now() - startTime;
@@ -661,16 +663,22 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
             if (!nodeElement) nodeElement = document.querySelector(`[data-id="${targetId}"]`);
 
             if (nodeElement) {
-                // Determine focus target: input (edit) -> wrapper (select) -> node
                 const inputElement = nodeElement.querySelector('input') as HTMLInputElement;
                 const wrapperElement = nodeElement.querySelector('[tabindex="0"]') as HTMLElement;
+
+                // If preferInput is true, wait for input unless we've exceeded the input wait threshold
+                if (preferInput && !inputElement && elapsed < inputWaitThreshold) {
+                    // Node found but input not ready yet - keep waiting
+                    return;
+                }
+
+                // Now decide what to focus
                 const targetElement = inputElement ?? wrapperElement ?? (nodeElement as HTMLElement);
 
                 if (targetElement) {
-                    // Success!
-                    console.log('[MindMap] Focus SUCCESS for:', targetId, `in ${elapsed}ms`);
+                    console.log('[MindMap] Focus SUCCESS for:', targetId, `in ${elapsed}ms, element:`, inputElement ? 'input' : 'wrapper');
                     targetElement.focus();
-                    if (inputElement) inputElement.select(); // Select text if input
+                    if (inputElement) inputElement.select();
 
                     clearInterval(timer);
                     focusQueueRef.current = null;
