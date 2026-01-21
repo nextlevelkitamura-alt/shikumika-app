@@ -38,7 +38,7 @@ function getLayoutedElements(nodes: Node[], edges: Edge[]): { nodes: Node[], edg
     // This prevents "gap" issues when nodes are deleted and new ones are added
     dagreGraph.nodes().forEach(n => dagreGraph.removeNode(n));
 
-    dagreGraph.setGraph({ rankdir: 'LR', nodesep: 50, ranksep: 200 });
+    dagreGraph.setGraph({ rankdir: 'LR', nodesep: 30, ranksep: 120 });
 
     nodes.forEach((node) => {
         let width = NODE_WIDTH;
