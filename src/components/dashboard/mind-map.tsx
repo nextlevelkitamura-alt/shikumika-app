@@ -300,18 +300,15 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
         e.stopPropagation();
 
         if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+            // Xmind Protocol: Edit+Enter = Confirm and return to Select Mode
             e.preventDefault();
             await saveValue();
-            setIsEditing(false);
-            // Trigger sibling creation
-            if (data?.onAddSibling) {
-                await data.onAddSibling();
-            }
+            exitEditMode();
         } else if (e.key === 'Tab') {
+            // Xmind Protocol: Edit+Tab = Confirm + Create Child (combo action)
             e.preventDefault();
             await saveValue();
             setIsEditing(false);
-            // Trigger child creation
             if (data?.onAddChild) {
                 await data.onAddChild();
             }
