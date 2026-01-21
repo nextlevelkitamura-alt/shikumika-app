@@ -20,7 +20,7 @@ interface UseMindMapSyncReturn {
     createGroup: (title: string) => Promise<TaskGroup | null>
     updateGroupTitle: (groupId: string, newTitle: string) => Promise<void>
     deleteGroup: (groupId: string) => Promise<void>
-    createTask: (groupId: string, title?: string, parentTaskId?: string | null) => Promise<Task | null>
+    createTask: (groupId: string, title?: string, parentTaskId?: string | null, specifiedId?: string) => Promise<Task | null>
     updateTask: (taskId: string, updates: Partial<Task>) => Promise<void>
     deleteTask: (taskId: string) => Promise<void>
     moveTask: (taskId: string, newGroupId: string) => Promise<void>
@@ -98,9 +98,9 @@ export function useMindMapSync({
 
     // --- Task Operations ---
     // OPTIMISTIC UI: Generate client-side UUID and update local state immediately
-    const createTask = useCallback(async (groupId: string, title: string = "New Task", parentTaskId: string | null = null): Promise<Task | null> => {
+    const createTask = useCallback(async (groupId: string, title: string = "New Task", parentTaskId: string | null = null, specifiedId?: string): Promise<Task | null> => {
         // Generate client-side UUID for instant feedback
-        const optimisticId = crypto.randomUUID();
+        const optimisticId = specifiedId || crypto.randomUUID();
         const now = new Date().toISOString();
 
         const groupTasks = tasks.filter(t => t.group_id === groupId);
@@ -168,20 +168,30 @@ export function useMindMapSync({
 
     const updateTask = useCallback(async (taskId: string, updates: Partial<Task>) => {
         setTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...updates } : t))
-        try {
-            await supabase.from('tasks').update(updates).eq('id', taskId)
-        } catch (e) {
-            console.error('[Sync] updateTask failed:', e)
-        }
+
+        // Background sync
+        const performUpdate = async () => {
+            try {
+                await supabase.from('tasks').update(updates).eq('id', taskId)
+            } catch (e) {
+                console.error('[Sync] updateTask failed:', e)
+            }
+        };
+        performUpdate();
     }, [supabase])
 
     const deleteTask = useCallback(async (taskId: string) => {
         setTasks(prev => prev.filter(t => t.id !== taskId))
-        try {
-            await supabase.from('tasks').delete().eq('id', taskId)
-        } catch (e) {
-            console.error('[Sync] deleteTask failed:', e)
-        }
+
+        // Background sync
+        const performDelete = async () => {
+            try {
+                await supabase.from('tasks').delete().eq('id', taskId)
+            } catch (e) {
+                console.error('[Sync] deleteTask failed:', e)
+            }
+        };
+        performDelete();
     }, [supabase])
 
     const moveTask = useCallback(async (taskId: string, newGroupId: string) => {

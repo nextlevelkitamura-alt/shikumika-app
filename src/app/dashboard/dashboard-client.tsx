@@ -140,8 +140,8 @@ function DashboardContent({
     // === HISTORY-WRAPPED CRUD FUNCTIONS ===
 
     // Wrapped createTask with history recording
-    const createTaskWithHistory = useCallback(async (groupId: string, title?: string, parentTaskId?: string | null): Promise<Task | null> => {
-        const newTask = await createTask(groupId, title, parentTaskId);
+    const createTaskWithHistory = useCallback(async (groupId: string, title?: string, parentTaskId?: string | null, specifiedId?: string): Promise<Task | null> => {
+        const newTask = await createTask(groupId, title, parentTaskId, specifiedId);
         if (newTask) {
             const action: HistoryAction = {
                 type: 'CREATE_TASK',

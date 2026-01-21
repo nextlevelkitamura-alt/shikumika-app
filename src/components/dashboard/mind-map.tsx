@@ -325,7 +325,10 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
         } else if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
             e.preventDefault();
             await saveValue();
-            exitEditMode();
+            setIsEditing(false);
+            if (data?.onAddSibling) {
+                await data.onAddSibling();
+            }
         } else if (e.key === 'Escape') {
             e.preventDefault();
             setEditValue(data?.label ?? '');
@@ -417,7 +420,7 @@ interface MindMapProps {
     onUpdateGroupTitle: (groupId: string, newTitle: string) => void
     onCreateGroup?: (title: string) => void
     onDeleteGroup?: (groupId: string) => void
-    onCreateTask?: (groupId: string, title?: string, parentTaskId?: string | null) => Promise<Task | null>
+    onCreateTask?: (groupId: string, title?: string, parentTaskId?: string | null, specifiedId?: string) => Promise<Task | null>
     onUpdateTask?: (taskId: string, updates: Partial<Task>) => Promise<void>
     onDeleteTask?: (taskId: string) => Promise<void>
     onMoveTask?: (taskId: string, newGroupId: string) => Promise<void>
@@ -477,14 +480,15 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
         const group = getGroupForTask(parentTask);
         if (!group) return;
 
-        // Create task and get ID (Optimistic)
-        const newTask = await onCreateTask(group.id, "", parentTaskId);
+        // Client-First: Generate ID
+        const newId = crypto.randomUUID();
 
-        // Queue focus strictly
-        if (newTask) {
-            nextFocusTargetId.current = newTask.id;
-            setSelectedNodeId(newTask.id); // Set selection immediately
-        }
+        // Queue Focus Synchronously
+        nextFocusTargetId.current = newId;
+        setSelectedNodeId(newId);
+
+        // Non-blocking creation
+        onCreateTask(group.id, "", parentTaskId, newId);
     }, [getTaskById, getGroupForTask, onCreateTask]);
 
     // Add sibling task
@@ -494,14 +498,15 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
         const group = getGroupForTask(task);
         if (!group) return;
 
-        // Create task and get ID (Optimistic)
-        const newTask = await onCreateTask(group.id, "", task.parent_task_id);
+        // Client-First: Generate ID
+        const newId = crypto.randomUUID();
 
-        // Queue focus strictly
-        if (newTask) {
-            nextFocusTargetId.current = newTask.id;
-            setSelectedNodeId(newTask.id); // Set selection immediately
-        }
+        // Queue Focus Synchronously
+        nextFocusTargetId.current = newId;
+        setSelectedNodeId(newId);
+
+        // Non-blocking creation (siblings share parent)
+        onCreateTask(group.id, "", task.parent_task_id, newId);
     }, [getTaskById, getGroupForTask, onCreateTask]);
 
     // Delete task
@@ -513,9 +518,14 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
             if (!confirmed) return;
         }
 
+        // Calculate next focus BEFORE deleting
         const nextFocusId = calculateNextFocus(taskId);
-        await onDeleteTask(taskId);
+
+        // Instant Focus Move
         setSelectedNodeId(nextFocusId);
+
+        // Fire-and-forget deletion
+        onDeleteTask(taskId);
     }, [hasChildren, calculateNextFocus, onDeleteTask]);
 
     // Save task title
@@ -692,12 +702,13 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
         if (event.key === 'Tab') {
             event.preventDefault();
             if (onCreateTask) {
-                // Create task from group context
-                const newTask = await onCreateTask(selectedNodeId, "", null);
-                if (newTask) {
-                    nextFocusTargetId.current = newTask.id;
-                    setSelectedNodeId(newTask.id);
-                }
+                // Client-First: Generate ID for Tab creation
+                const newId = crypto.randomUUID();
+
+                nextFocusTargetId.current = newId;
+                setSelectedNodeId(newId);
+
+                onCreateTask(selectedNodeId, "", null, newId);
             }
         } else if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
             // Create new group when Enter is pressed on a group node
