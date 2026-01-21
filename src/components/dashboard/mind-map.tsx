@@ -672,10 +672,20 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
     // HELPER: Persistent DOM polling using setInterval (V2)
     // Ensures focus is captured even if React renders are delayed
     // CRITICAL: Waits for input element to appear (new nodes need time to enter edit mode)
+    // RACE CONDITION FIX: Cancels previous focus operation when new one starts
+    const activeTimerRef = useRef<NodeJS.Timeout | null>(null);
+
     const focusNodeWithPollingV2 = useCallback((targetId: string, maxDuration: number = 500, preferInput: boolean = true) => {
         const startTime = Date.now();
         const pollingInterval = 10; // 10ms loop
         const inputWaitThreshold = 300; // Wait up to 300ms for input before settling for wrapper
+
+        // CRITICAL: Cancel any ongoing focus operation to prevent race conditions
+        if (activeTimerRef.current) {
+            console.log('[MindMap] Cancelling previous focus operation');
+            clearInterval(activeTimerRef.current);
+            activeTimerRef.current = null;
+        }
 
         console.log('[MindMap] Starting persistent focus polling V2 for:', targetId, 'preferInput:', preferInput);
 
@@ -706,6 +716,7 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
                     if (inputElement) inputElement.select();
 
                     clearInterval(timer);
+                    activeTimerRef.current = null;
                     focusQueueRef.current = null;
                     return;
                 }
@@ -715,9 +726,13 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
             if (elapsed > maxDuration) {
                 console.warn('[MindMap] Focus polling TIMED OUT for:', targetId);
                 clearInterval(timer);
+                activeTimerRef.current = null;
                 focusQueueRef.current = null;
             }
         }, pollingInterval);
+
+        // Store the timer reference for potential cancellation
+        activeTimerRef.current = timer;
     }, []);
 
     // EFFECT: Detect new task and queue focus with DOM polling
