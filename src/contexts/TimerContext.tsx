@@ -15,7 +15,7 @@ interface TimerContextType {
     currentElapsedSeconds: number;
 
     // Actions
-    startTimer: (task: Task) => Promise<void>;
+    startTimer: (task: Task) => Promise<boolean>;
     pauseTimer: () => Promise<void>;
     completeTimer: () => Promise<void>;
     interruptTimer: () => Promise<void>;
@@ -51,12 +51,41 @@ export function TimerProvider({ children, tasks, onUpdateTask }: TimerProviderPr
     const runningTask = tasks.find(t => t.id === runningTaskId) ?? null;
 
     // Initialize: find any running timer on mount
+    // IMPORTANT: If multiple timers are running (data inconsistency), keep only the most recent one
     useEffect(() => {
-        const runningTask = tasks.find(t => t.is_timer_running === true);
-        if (runningTask) {
-            setRunningTaskId(runningTask.id);
+        const runningTasks = tasks.filter(t => t.is_timer_running === true);
+
+        if (runningTasks.length === 0) {
+            return;
         }
-    }, [tasks]);
+
+        if (runningTasks.length === 1) {
+            // Normal case: exactly one timer running
+            setRunningTaskId(runningTasks[0].id);
+        } else {
+            // Data inconsistency: multiple timers running
+            // Keep the most recently started one, stop others
+            console.warn('[TimerContext] Multiple running timers detected:', runningTasks.length);
+
+            const sorted = runningTasks.sort((a, b) => {
+                const aTime = new Date(a.last_started_at || 0).getTime();
+                const bTime = new Date(b.last_started_at || 0).getTime();
+                return bTime - aTime; // Most recent first
+            });
+
+            const keepTask = sorted[0];
+            setRunningTaskId(keepTask.id);
+
+            // Stop other timers (async, fire-and-forget for initialization)
+            sorted.slice(1).forEach(async (task) => {
+                console.log('[TimerContext] Stopping orphan timer:', task.id);
+                await onUpdateTask(task.id, {
+                    is_timer_running: false,
+                    last_started_at: null
+                });
+            });
+        }
+    }, []); // Run only on mount, not on every tasks change
 
     // Update elapsed time every second when timer is running
     useEffect(() => {
@@ -123,14 +152,27 @@ export function TimerProvider({ children, tasks, onUpdateTask }: TimerProviderPr
     }, [runningTaskId, runningTask, onUpdateTask]);
 
     // Start timer for a task
-    const startTimer = useCallback(async (task: Task) => {
-        setIsLoading(true);
-        try {
-            // If another timer is running, stop it first (EXCLUSIVE CONTROL)
-            if (runningTaskId && runningTaskId !== task.id) {
-                await stopCurrentTimer();
+    const startTimer = useCallback(async (task: Task): Promise<boolean> => {
+        // EXCLUSIVE CONTROL: Check if another timer is running
+        if (runningTaskId && runningTaskId !== task.id) {
+            // Get the currently running task's title for the confirmation message
+            const runningTaskTitle = runningTask?.title || '別のタスク';
+
+            // Require explicit user confirmation before switching
+            const confirmed = window.confirm(
+                `「${runningTaskTitle}」でタイマーが実行中です。\n\n停止して「${task.title || 'このタスク'}」を開始しますか？`
+            );
+
+            if (!confirmed) {
+                return false; // User cancelled - do not switch
             }
 
+            // User confirmed - stop current timer first
+            await stopCurrentTimer();
+        }
+
+        setIsLoading(true);
+        try {
             // Start the new timer
             const now = new Date().toISOString();
             await onUpdateTask(task.id, {
@@ -139,10 +181,11 @@ export function TimerProvider({ children, tasks, onUpdateTask }: TimerProviderPr
             });
 
             setRunningTaskId(task.id);
+            return true;
         } finally {
             setIsLoading(false);
         }
-    }, [runningTaskId, stopCurrentTimer, onUpdateTask]);
+    }, [runningTaskId, runningTask, stopCurrentTimer, onUpdateTask]);
 
     // Pause timer (stop without completing)
     const pauseTimer = useCallback(async () => {
