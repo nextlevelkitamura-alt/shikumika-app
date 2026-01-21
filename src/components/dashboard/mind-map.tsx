@@ -404,22 +404,25 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
         e.stopPropagation();
 
         if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
-            // Xmind Protocol: Edit+Enter = Confirm and return to Select Mode
+            // Xmind Protocol: Edit+Enter = Confirm -> Create Sibling
+            // This satisfies the "2-step" requirement (Confirm -> Create)
             e.preventDefault();
+            e.stopPropagation();
 
-            // Set flag BEFORE state changes to prevent blur from double-saving
+            // Set flag to prevent onBlur double-save
             isSavingViaKeyboardRef.current = true;
 
             await saveValue();
             setIsEditing(false);
 
-            // Immediate focus to wrapper for instant Select Mode
-            // Immediate focus to wrapper
-            requestAnimationFrame(() => {
-                wrapperRef.current?.focus();
-                // Reset flag
-                setTimeout(() => { isSavingViaKeyboardRef.current = false; }, 0);
-            });
+            // Trigger sibling creation immediately
+            // This bypasses the need for an extra Enter press
+            if (data?.onAddSibling) {
+                await data.onAddSibling();
+            }
+
+            // Reset keyboard flag
+            setTimeout(() => { isSavingViaKeyboardRef.current = false; }, 0);
         } else if (e.key === 'Tab') {
             // Xmind Protocol: Edit+Tab = Confirm + Create Child
             e.preventDefault();
@@ -764,11 +767,18 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
         const group = getGroupForTask(parentTask);
         if (!group) return;
 
-        // Set flag BEFORE creating
+        // Set flag (mostly for logs now)
         isCreatingNodeRef.current = true;
 
-        await onCreateTask(group.id, "", parentTaskId);
-    }, [getTaskById, getGroupForTask, onCreateTask]);
+        const newTask = await onCreateTask(group.id, "", parentTaskId);
+        if (newTask) {
+            console.log('[MindMap] Child task created:', newTask.id, 'Focusing immediately (V2)');
+            // Direct focus on the explicit ID
+            focusNodeWithPollingV2(newTask.id);
+            setSelectedNodeId(newTask.id);
+            setPendingEditNodeId(newTask.id);
+        }
+    }, [getTaskById, getGroupForTask, onCreateTask, focusNodeWithPollingV2]);
 
     // Add sibling task
     const addSiblingTask = useCallback(async (taskId: string) => {
@@ -777,12 +787,18 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
         const group = getGroupForTask(task);
         if (!group) return;
 
-        // Set flag BEFORE creating (enables focus detection)
-        console.log('[MindMap] Creating sibling task, setting isCreatingNodeRef to true');
+        // Set flag (mostly for logs now)
         isCreatingNodeRef.current = true;
 
-        await onCreateTask(group.id, "", task.parent_task_id);
-    }, [getTaskById, getGroupForTask, onCreateTask]);
+        const newTask = await onCreateTask(group.id, "", task.parent_task_id);
+        if (newTask) {
+            console.log('[MindMap] Sibling task created:', newTask.id, 'Focusing immediately (V2)');
+            // Direct focus on the explicit ID - fixes "focus reverting to old task" bug
+            focusNodeWithPollingV2(newTask.id);
+            setSelectedNodeId(newTask.id);
+            setPendingEditNodeId(newTask.id);
+        }
+    }, [getTaskById, getGroupForTask, onCreateTask, focusNodeWithPollingV2]);
 
     // Delete task
     const deleteTask = useCallback(async (taskId: string) => {
