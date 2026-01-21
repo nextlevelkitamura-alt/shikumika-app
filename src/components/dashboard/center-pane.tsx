@@ -217,15 +217,22 @@ function TaskItem({
                         </>
                     ) : (
                         /* Stopped State: Play button (visible on hover) */
+                        /* Show different state if another timer is running */
                         <Button
                             variant="outline"
                             size="sm"
-                            className="h-6 text-[10px] gap-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-primary hover:text-primary-foreground"
+                            className={cn(
+                                "h-6 text-[10px] gap-1 opacity-0 group-hover:opacity-100 transition-opacity",
+                                runningTaskId && runningTaskId !== task.id
+                                    ? "border-amber-500/50 text-amber-600 hover:bg-amber-500/10"
+                                    : "hover:bg-primary hover:text-primary-foreground"
+                            )}
                             onClick={() => startTimer(task)}
                             disabled={isLoading || task.status === 'done'}
+                            title={runningTaskId && runningTaskId !== task.id ? "別タスクで計測中（切替可能）" : "タイマー開始"}
                         >
                             <Play className="w-2.5 h-2.5" />
-                            フォーカス
+                            {runningTaskId && runningTaskId !== task.id ? "切替" : "フォーカス"}
                         </Button>
                     )}
                 </div>
