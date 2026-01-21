@@ -20,6 +20,7 @@ interface CenterPaneProps {
     groups: TaskGroup[]
     tasks: Task[]
     onUpdateGroupTitle?: (groupId: string, newTitle: string) => void
+    onUpdateProject?: (projectId: string, title: string) => Promise<void>
     onCreateGroup?: (title: string) => void
     onDeleteGroup?: (groupId: string) => void
     onCreateTask?: (groupId: string, title?: string, parentTaskId?: string | null) => Promise<Task | null>
@@ -290,6 +291,7 @@ export function CenterPane({
     groups,
     tasks,
     onUpdateGroupTitle,
+    onUpdateProject,
     onCreateGroup,
     onDeleteGroup,
     onCreateTask,
@@ -402,6 +404,7 @@ export function CenterPane({
                     groups={groups}
                     tasks={tasks}
                     onUpdateGroupTitle={onUpdateGroupTitle || (() => { })}
+                    onUpdateProject={onUpdateProject}
                     onCreateGroup={onCreateGroup}
                     onDeleteGroup={onDeleteGroup}
                     onCreateTask={onCreateTask}

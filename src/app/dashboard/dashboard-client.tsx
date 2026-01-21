@@ -30,7 +30,7 @@ export function DashboardClient({
 }: DashboardClientProps) {
     // State
     const [goals] = useState<Goal[]>(initialGoals)
-    const [projects] = useState<Project[]>(initialProjects)
+    const [projects, setProjects] = useState<Project[]>(initialProjects)
 
     // Selection State
     const [selectedGoalId, setSelectedGoalId] = useState<string | null>(
@@ -86,6 +86,7 @@ export function DashboardClient({
         updateTask,
         deleteTask,
         moveTask,
+        updateProjectTitle,
         isLoading
     } = useMindMapSync({
         projectId: selectedProjectId,
@@ -98,6 +99,16 @@ export function DashboardClient({
     const handleCreateGroup = useCallback(async (title: string) => {
         await createGroup(title)
     }, [createGroup])
+
+    const handleUpdateProjectTitle = useCallback(async (projectId: string, newTitle: string) => {
+        // Optimistic update local state
+        setProjects(prev => prev.map(p => p.id === projectId ? { ...p, title: newTitle } : p))
+
+        // Persist to DB
+        if (updateProjectTitle) {
+            await updateProjectTitle(projectId, newTitle)
+        }
+    }, [updateProjectTitle])
 
     const handleUpdateGroupTitle = useCallback(async (groupId: string, newTitle: string) => {
         await updateGroupTitle(groupId, newTitle)
@@ -188,6 +199,7 @@ export function DashboardClient({
                         groups={currentGroups}
                         tasks={currentTasks}
                         onUpdateGroupTitle={handleUpdateGroupTitle}
+                        onUpdateProject={handleUpdateProjectTitle}
                         onCreateGroup={handleCreateGroup}
                         onDeleteGroup={handleDeleteGroup}
                         onCreateTask={createTask}

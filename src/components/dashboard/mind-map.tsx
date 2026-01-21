@@ -591,13 +591,14 @@ interface MindMapProps {
     onUpdateGroupTitle: (groupId: string, newTitle: string) => void
     onCreateGroup?: (title: string) => void
     onDeleteGroup?: (groupId: string) => void
+    onUpdateProject?: (projectId: string, title: string) => Promise<void>
     onCreateTask?: (groupId: string, title?: string, parentTaskId?: string | null) => Promise<Task | null>
     onUpdateTask?: (taskId: string, updates: Partial<Task>) => Promise<void>
     onDeleteTask?: (taskId: string) => Promise<void>
     onMoveTask?: (taskId: string, newGroupId: string) => Promise<void>
 }
 
-function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGroup, onDeleteGroup, onCreateTask, onUpdateTask, onDeleteTask }: MindMapProps) {
+function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGroup, onDeleteGroup, onUpdateProject, onCreateTask, onUpdateTask, onDeleteTask }: MindMapProps) {
     const projectId = project?.id ?? '';
     const groupsJson = JSON.stringify(groups?.map(g => ({ id: g?.id, title: g?.title })) ?? []);
     const tasksJson = JSON.stringify(tasks?.map(t => ({
@@ -975,8 +976,9 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
                     label: project?.title ?? 'Project',
                     onSave: async (newTitle: string) => {
                         console.log('[MindMap] Project title update requested:', newTitle);
-                        // TODO: Implement project title update via onUpdateProject callback
-                        // For now, this allows editing but doesn't persist to backend
+                        if (onUpdateProject && project?.id) {
+                            await onUpdateProject(project.id, newTitle);
+                        }
                     },
                     onDelete: () => {
                         console.warn('[MindMap] Project deletion requested - this should be handled at dashboard level');

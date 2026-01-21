@@ -24,6 +24,7 @@ interface UseMindMapSyncReturn {
     updateTask: (taskId: string, updates: Partial<Task>) => Promise<void>
     deleteTask: (taskId: string) => Promise<void>
     moveTask: (taskId: string, newGroupId: string) => Promise<void>
+    updateProjectTitle: (projectId: string, title: string) => Promise<void>
     isLoading: boolean
     // Helper functions for parent-child relationships
     getChildTasks: (parentTaskId: string) => Task[]
@@ -243,6 +244,14 @@ export function useMindMapSync({
         return tasks.filter(t => t.group_id === groupId && !t.parent_task_id).sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0))
     }, [tasks])
 
+    const updateProjectTitle = useCallback(async (projectId: string, title: string) => {
+        try {
+            await supabase.from('projects').update({ title }).eq('id', projectId)
+        } catch (e) {
+            console.error('[Sync] updateProjectTitle failed:', e)
+        }
+    }, [supabase])
+
     return {
         groups,
         tasks,
@@ -253,6 +262,7 @@ export function useMindMapSync({
         updateTask,
         deleteTask,
         moveTask,
+        updateProjectTitle,
         isLoading,
         getChildTasks,
         getParentTasks
