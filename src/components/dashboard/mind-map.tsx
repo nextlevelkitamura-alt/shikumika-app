@@ -318,7 +318,7 @@ const GroupNode = React.memo(({ data, selected }: NodeProps) => {
             ref={wrapperRef}
             className={cn(
                 "w-[150px] px-3 py-2 rounded-lg bg-card border text-sm font-medium text-center shadow transition-all outline-none",
-                selected && "ring-2 ring-primary ring-offset-2 ring-offset-background"
+                selected && "ring-2 ring-white ring-offset-2 ring-offset-background"
             )}
             tabIndex={0}
             onKeyDown={handleWrapperKeyDown}
@@ -538,7 +538,7 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
             ref={wrapperRef}
             className={cn(
                 "w-[140px] px-2 py-1.5 rounded bg-background border text-xs shadow-sm flex items-center gap-1 transition-all outline-none",
-                selected && "ring-2 ring-primary ring-offset-1 ring-offset-background border-primary"
+                selected && "ring-2 ring-white ring-offset-1 ring-offset-background border-white"
             )}
             tabIndex={0}
             onKeyDown={handleWrapperKeyDown}
