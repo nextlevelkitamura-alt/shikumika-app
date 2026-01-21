@@ -176,8 +176,17 @@ const ProjectNode = React.memo(({ data, selected }: NodeProps) => {
             e.preventDefault();
             setIsEditing(true);
             setEditValue(data?.label ?? '');
+        } else if (e.key === 'Delete' || e.key === 'Backspace') {
+            // ROOT NODE DELETE: Require confirmation
+            e.preventDefault();
+            const confirmed = window.confirm(
+                `プロジェクト「${data?.label ?? 'このプロジェクト'}」を削除しますか？\n\nこの操作は取り消せません。`
+            );
+            if (confirmed && data?.onDelete) {
+                data.onDelete();
+            }
         }
-    }, [isEditing, data?.label]);
+    }, [isEditing, data]);
 
     const handleDoubleClick = useCallback((e: React.MouseEvent) => {
         e.stopPropagation();
@@ -968,6 +977,11 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
                         console.log('[MindMap] Project title update requested:', newTitle);
                         // TODO: Implement project title update via onUpdateProject callback
                         // For now, this allows editing but doesn't persist to backend
+                    },
+                    onDelete: () => {
+                        console.warn('[MindMap] Project deletion requested - this should be handled at dashboard level');
+                        // Project deletion should be handled by parent component
+                        // For now, just log a warning
                     }
                 },
                 position: { x: 50, y: 200 },
