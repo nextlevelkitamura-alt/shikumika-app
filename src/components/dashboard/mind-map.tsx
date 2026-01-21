@@ -341,6 +341,12 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
             e.preventDefault();
             setIsEditing(true);
             setEditValue(data?.label ?? '');
+        } else if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+            // Arrow key navigation (tree-based, not visual)
+            e.preventDefault();
+            if (data?.onNavigate) {
+                data.onNavigate(e.key as 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight');
+            }
         } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
             e.preventDefault();
             setIsEditing(true);
@@ -612,6 +618,74 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
         setSelectedNodeId(nextFocusId);
     }, [hasChildren, calculateNextFocus, onDeleteTask]);
 
+    // Navigation helpers for arrow keys
+    const navigateToSibling = useCallback((taskId: string, direction: 'up' | 'down'): string | null => {
+        const task = getTaskById(taskId);
+        if (!task) return null;
+
+        const siblings = tasks
+            .filter(t => t.group_id === task.group_id && t.parent_task_id === task.parent_task_id)
+            .sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0));
+
+        const currentIndex = siblings.findIndex(t => t.id === taskId);
+        if (currentIndex === -1) return null;
+
+        const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+        return siblings[targetIndex]?.id ?? null;
+    }, [tasks, getTaskById]);
+
+    const navigateToParent = useCallback((taskId: string): string | null => {
+        const task = getTaskById(taskId);
+        if (!task) return null;
+        return task.parent_task_id ?? task.group_id ?? null;
+    }, [getTaskById]);
+
+    const navigateToFirstChild = useCallback((taskId: string): string | null => {
+        const children = tasks
+            .filter(t => t.parent_task_id === taskId)
+            .sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0));
+        return children[0]?.id ?? null;
+    }, [tasks]);
+
+    const handleNavigate = useCallback((taskId: string, direction: 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight') => {
+        let targetId: string | null = null;
+
+        switch (direction) {
+            case 'ArrowUp':
+                targetId = navigateToSibling(taskId, 'up');
+                break;
+            case 'ArrowDown':
+                targetId = navigateToSibling(taskId, 'down');
+                break;
+            case 'ArrowLeft':
+                targetId = navigateToParent(taskId);
+                break;
+            case 'ArrowRight':
+                targetId = navigateToFirstChild(taskId);
+                break;
+        }
+
+        if (targetId) {
+            setSelectedNodeId(targetId);
+            // Focus the target node's wrapper using multiple selector strategies
+            requestAnimationFrame(() => {
+                // Try React Flow standard selector first
+                let targetElement = document.querySelector(`.react-flow__node[data-id="${targetId}"] [tabindex="0"]`) as HTMLElement;
+
+                // Fallback to data-id only
+                if (!targetElement) {
+                    targetElement = document.querySelector(`[data-id="${targetId}"] [tabindex="0"]`) as HTMLElement;
+                }
+
+                if (targetElement) {
+                    targetElement.focus();
+                } else {
+                    console.warn('[MindMap] Could not find target element for navigation:', targetId);
+                }
+            });
+        }
+    }, [navigateToSibling, navigateToParent, navigateToFirstChild]);
+
     // Save task title
     const saveTaskTitle = useCallback(async (taskId: string, newTitle: string) => {
         if (onUpdateTask && newTitle.trim()) {
@@ -697,6 +771,7 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
                         onAddChild: () => addChildTask(task.id),
                         onAddSibling: () => addSiblingTask(task.id),
                         onDelete: () => deleteTask(task.id),
+                        onNavigate: (direction: 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight') => handleNavigate(task.id, direction),
                     },
                     position: { x: xPos, y: yOffsetRef.current },
                     selected: selectedNodeId === task.id,
