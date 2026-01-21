@@ -167,13 +167,54 @@ export function useMindMapSync({
     }, [userId, tasks, supabase]);
 
     const updateTask = useCallback(async (taskId: string, updates: Partial<Task>) => {
+        // Optimistic update
         setTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...updates } : t))
+
         try {
             await supabase.from('tasks').update(updates).eq('id', taskId)
+
+            // AUTO-COMPLETE PARENT: If status changed to 'done', check if all siblings are also done
+            if (updates.status === 'done') {
+                const task = tasks.find(t => t.id === taskId);
+                if (task?.parent_task_id) {
+                    // Get all siblings (including this task with updated status)
+                    const siblings = tasks
+                        .filter(t => t.parent_task_id === task.parent_task_id)
+                        .map(t => t.id === taskId ? { ...t, status: 'done' } : t);
+
+                    // Check if ALL siblings are done
+                    const allSiblingsDone = siblings.every(s => s.status === 'done');
+
+                    if (allSiblingsDone) {
+                        console.log('[AutoComplete] All children done, completing parent:', task.parent_task_id);
+                        // Auto-complete parent (optimistic + DB)
+                        setTasks(prev => prev.map(t =>
+                            t.id === task.parent_task_id ? { ...t, status: 'done' } : t
+                        ));
+                        await supabase.from('tasks').update({ status: 'done' }).eq('id', task.parent_task_id);
+                    }
+                }
+            }
+
+            // AUTO-UNCOMPLETE PARENT: If status changed to 'todo'/'pending', uncomplete parent if it was done
+            if (updates.status && updates.status !== 'done') {
+                const task = tasks.find(t => t.id === taskId);
+                if (task?.parent_task_id) {
+                    const parent = tasks.find(t => t.id === task.parent_task_id);
+                    if (parent?.status === 'done') {
+                        console.log('[AutoComplete] Child incomplete, uncompleting parent:', task.parent_task_id);
+                        // Auto-uncomplete parent (optimistic + DB)
+                        setTasks(prev => prev.map(t =>
+                            t.id === task.parent_task_id ? { ...t, status: 'todo' } : t
+                        ));
+                        await supabase.from('tasks').update({ status: 'todo' }).eq('id', task.parent_task_id);
+                    }
+                }
+            }
         } catch (e) {
             console.error('[Sync] updateTask failed:', e)
         }
-    }, [supabase])
+    }, [supabase, tasks])
 
     const deleteTask = useCallback(async (taskId: string) => {
         setTasks(prev => prev.filter(t => t.id !== taskId))
