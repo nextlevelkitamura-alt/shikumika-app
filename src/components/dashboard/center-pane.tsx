@@ -105,7 +105,7 @@ function TaskItem({
                 style={{ paddingLeft: `calc(${depth * 1.5}rem + 0.5rem)` }}
             >
                 {/* Drag Handle */}
-                {depth === 0 && dragHandleProps && (
+                {dragHandleProps && (
                     <div
                         {...dragHandleProps}
                         className="cursor-grab active:cursor-grabbing text-muted-foreground/40 hover:text-muted-foreground transition-colors"
