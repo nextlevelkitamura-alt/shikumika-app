@@ -504,6 +504,14 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
         }
     }, [saveValue]);
 
+    // Ensure focus when clicked (fixes Delete key not working after clicking)
+    const handleWrapperClick = useCallback((e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!isEditing && wrapperRef.current) {
+            wrapperRef.current.focus();
+        }
+    }, [isEditing]);
+
     return (
         <div
             ref={wrapperRef}
@@ -514,6 +522,7 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
             tabIndex={0}
             onKeyDown={handleWrapperKeyDown}
             onDoubleClick={handleDoubleClick}
+            onClick={handleWrapperClick}
         >
             <Handle type="target" position={Position.Left} className="!bg-muted-foreground/50 !w-1 !h-1" />
             <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", data?.status === 'done' ? "bg-primary" : "bg-muted-foreground/30")} />
