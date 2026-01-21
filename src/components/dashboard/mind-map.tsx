@@ -348,6 +348,9 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
     const [isEditing, setIsEditing] = useState<boolean>(false);
     const [editValue, setEditValue] = useState<string>(data?.label ?? '');
 
+    // Flag to prevent double-save when exiting via keyboard (Enter/Tab/Escape)
+    const isSavingViaKeyboardRef = useRef(false);
+
     // Trigger edit from external
     useEffect(() => {
         if (data?.triggerEdit && !isEditing) {
@@ -402,35 +405,43 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
 
         if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
             // Xmind Protocol: Edit+Enter = Confirm and return to Select Mode
-            // CRITICAL: Immediate focus return for 2-press sibling creation
             e.preventDefault();
+
+            // Set flag BEFORE state changes to prevent blur from double-saving
+            isSavingViaKeyboardRef.current = true;
+
             await saveValue();
             setIsEditing(false);
 
-            // Immediate synchronous focus to wrapper for instant Select Mode
-            // This ensures 2nd Enter press immediately creates sibling
-            if (wrapperRef.current) {
-                wrapperRef.current.focus();
-            }
-            // Fallback with setTimeout(0) to ensure focus even if sync fails
+            // Immediate focus to wrapper for instant Select Mode
             setTimeout(() => {
-                if (wrapperRef.current && !isEditing) {
-                    wrapperRef.current.focus();
-                }
+                wrapperRef.current?.focus();
+                isSavingViaKeyboardRef.current = false;
             }, 0);
         } else if (e.key === 'Tab') {
-            // Xmind Protocol: Edit+Tab = Confirm + Create Child (instant combo)
+            // Xmind Protocol: Edit+Tab = Confirm + Create Child
             e.preventDefault();
+
+            isSavingViaKeyboardRef.current = true;
+
             await saveValue();
             setIsEditing(false);
-            // Child creation triggers automatic focus via focusNodeWithPolling
+
             if (data?.onAddChild) {
                 await data.onAddChild();
             }
+
+            setTimeout(() => {
+                isSavingViaKeyboardRef.current = false;
+            }, 0);
         } else if (e.key === 'Escape') {
             e.preventDefault();
+            isSavingViaKeyboardRef.current = true;
             setEditValue(data?.label ?? '');
             exitEditMode();
+            setTimeout(() => {
+                isSavingViaKeyboardRef.current = false;
+            }, 0);
         }
     }, [saveValue, exitEditMode, data, isEditing]);
 
@@ -472,16 +483,19 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
     }, [data?.label]);
 
     const handleInputBlur = useCallback(async () => {
-        console.log('[TaskNode] Input blur triggered, saving and exiting edit mode');
+        // Skip if exiting via keyboard (Enter/Tab/Escape already handled save)
+        if (isSavingViaKeyboardRef.current) {
+            console.log('[TaskNode] Blur skipped (keyboard exit)');
+            return;
+        }
+
+        console.log('[TaskNode] Blur triggered (mouse), saving');
         try {
             await saveValue();
         } catch (error) {
             console.error('[TaskNode] Error saving on blur:', error);
         } finally {
-            // CRITICAL: Always exit edit mode, even if save fails
-            // This prevents "zombie state" where node is stuck in edit mode
             setIsEditing(false);
-            console.log('[TaskNode] Edit mode exited via blur');
         }
     }, [saveValue]);
 
