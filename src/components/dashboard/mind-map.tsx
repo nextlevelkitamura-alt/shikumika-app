@@ -414,10 +414,12 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
             setIsEditing(false);
 
             // Immediate focus to wrapper for instant Select Mode
-            setTimeout(() => {
+            // Immediate focus to wrapper
+            requestAnimationFrame(() => {
                 wrapperRef.current?.focus();
-                isSavingViaKeyboardRef.current = false;
-            }, 0);
+                // Reset flag
+                setTimeout(() => { isSavingViaKeyboardRef.current = false; }, 0);
+            });
         } else if (e.key === 'Tab') {
             // Xmind Protocol: Edit+Tab = Confirm + Create Child
             e.preventDefault();
@@ -639,6 +641,49 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
         requestAnimationFrame(attemptFocus);
     }, []);
 
+    // HELPER: Persistent DOM polling using setInterval (V2)
+    // Ensures focus is captured even if React renders are delayed
+    const focusNodeWithPollingV2 = useCallback((targetId: string, maxDuration: number = 500) => {
+        const startTime = Date.now();
+        const pollingInterval = 10; // 10ms loop
+
+        console.log('[MindMap] Starting persistent focus polling V2 for:', targetId);
+
+        const timer = setInterval(() => {
+            const elapsed = Date.now() - startTime;
+
+            // Strategy 1: React Flow standard selector
+            let nodeElement = document.querySelector(`.react-flow__node[data-id="${targetId}"]`);
+            // Strategy 2: Fallback selector
+            if (!nodeElement) nodeElement = document.querySelector(`[data-id="${targetId}"]`);
+
+            if (nodeElement) {
+                // Determine focus target: input (edit) -> wrapper (select) -> node
+                const inputElement = nodeElement.querySelector('input') as HTMLInputElement;
+                const wrapperElement = nodeElement.querySelector('[tabindex="0"]') as HTMLElement;
+                const targetElement = inputElement ?? wrapperElement ?? (nodeElement as HTMLElement);
+
+                if (targetElement) {
+                    // Success!
+                    console.log('[MindMap] Focus SUCCESS for:', targetId, `in ${elapsed}ms`);
+                    targetElement.focus();
+                    if (inputElement) inputElement.select(); // Select text if input
+
+                    clearInterval(timer);
+                    focusQueueRef.current = null;
+                    return;
+                }
+            }
+
+            // Timeout check
+            if (elapsed > maxDuration) {
+                console.warn('[MindMap] Focus polling TIMED OUT for:', targetId);
+                clearInterval(timer);
+                focusQueueRef.current = null;
+            }
+        }, pollingInterval);
+    }, []);
+
     // EFFECT: Detect new task and queue focus with DOM polling
     useEffect(() => {
         const currentCount = tasks.length;
@@ -661,8 +706,8 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
                 setSelectedNodeId(newestTask.id);
                 setPendingEditNodeId(newestTask.id);
 
-                // Start DOM polling for focus
-                focusNodeWithPolling(newestTask.id);
+                // Start DOM polling for focus (V2)
+                focusNodeWithPollingV2(newestTask.id);
             }
 
             // Reset the flag
@@ -671,15 +716,15 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
 
         // Update prev count
         prevTaskCountRef.current = currentCount;
-    }, [tasks, focusNodeWithPolling]);
+    }, [tasks, focusNodeWithPollingV2]);
 
     // EFFECT: Backup focus trigger when pendingEditNodeId changes
     useEffect(() => {
         if (pendingEditNodeId && focusQueueRef.current === pendingEditNodeId) {
-            // Additional polling attempt as backup
-            focusNodeWithPolling(pendingEditNodeId, 100);
+            // Additional polling attempt as backup (V2)
+            focusNodeWithPollingV2(pendingEditNodeId, 100);
         }
-    }, [pendingEditNodeId, focusNodeWithPolling]);
+    }, [pendingEditNodeId, focusNodeWithPollingV2]);
 
     // EFFECT: Clear pendingEditNodeId after a delay
     useEffect(() => {
