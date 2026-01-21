@@ -34,6 +34,10 @@ const GROUP_NODE_WIDTH = 160;
 const GROUP_NODE_HEIGHT = 50;
 
 function getLayoutedElements(nodes: Node[], edges: Edge[]): { nodes: Node[], edges: Edge[] } {
+    // CRITICAL: Reset dagre graph to clear any stale node/edge data from previous layouts
+    // This prevents "gap" issues when nodes are deleted and new ones are added
+    dagreGraph.nodes().forEach(n => dagreGraph.removeNode(n));
+
     dagreGraph.setGraph({ rankdir: 'LR', nodesep: 50, ranksep: 200 });
 
     nodes.forEach((node) => {
@@ -434,35 +438,53 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
     const focusQueueRef = useRef<string | null>(null);
 
     // HELPER: Robust DOM polling focus function
-    // Monitors for target input element and focuses immediately when found
-    const focusNodeWithPolling = useCallback((targetId: string, maxDuration: number = 150) => {
+    // Uses React Flow's standard node wrapper structure for reliable element detection
+    const focusNodeWithPolling = useCallback((targetId: string, maxDuration: number = 200) => {
         const startTime = Date.now();
+        let attemptCount = 0;
 
         const attemptFocus = () => {
+            attemptCount++;
+
             // Check if we've exceeded max duration
             if (Date.now() - startTime > maxDuration) {
-                console.log('[MindMap] Focus polling timed out for:', targetId);
+                console.log('[MindMap] Focus polling timed out for:', targetId, 'after', attemptCount, 'attempts');
                 focusQueueRef.current = null;
                 return;
             }
 
-            // Try to find the node's wrapper div first (for selection)
-            const nodeElement = document.querySelector(`[data-id="${targetId}"]`);
+            // Strategy 1: React Flow standard selector
+            let nodeElement = document.querySelector(`.react-flow__node[data-id="${targetId}"]`);
+
+            // Strategy 2: Fallback to data-id only (for custom nodes)
+            if (!nodeElement) {
+                nodeElement = document.querySelector(`[data-id="${targetId}"]`);
+            }
+
             if (nodeElement) {
                 // Look for input inside the node (edit mode)
                 const inputElement = nodeElement.querySelector('input') as HTMLInputElement;
                 if (inputElement) {
-                    console.log('[MindMap] Focus success (input):', targetId);
+                    console.log('[MindMap] Focus success (input):', targetId, 'attempt:', attemptCount);
                     inputElement.focus();
+                    inputElement.select(); // Select all text for easy replacement
                     focusQueueRef.current = null;
                     return;
                 }
 
-                // If no input, focus the wrapper (select mode trigger)
+                // If no input, focus the wrapper with tabindex (select mode trigger)
                 const wrapperElement = nodeElement.querySelector('[tabindex="0"]') as HTMLElement;
                 if (wrapperElement) {
-                    console.log('[MindMap] Focus success (wrapper):', targetId);
+                    console.log('[MindMap] Focus success (wrapper):', targetId, 'attempt:', attemptCount);
                     wrapperElement.focus();
+                    focusQueueRef.current = null;
+                    return;
+                }
+
+                // Last resort: focus the node element itself if it has tabindex
+                if (nodeElement instanceof HTMLElement && nodeElement.tabIndex >= 0) {
+                    console.log('[MindMap] Focus success (node):', targetId, 'attempt:', attemptCount);
+                    nodeElement.focus();
                     focusQueueRef.current = null;
                     return;
                 }
@@ -472,7 +494,8 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
             requestAnimationFrame(attemptFocus);
         };
 
-        // Start polling
+        // Clear any existing focus queue and start polling immediately
+        focusQueueRef.current = targetId;
         requestAnimationFrame(attemptFocus);
     }, []);
 
