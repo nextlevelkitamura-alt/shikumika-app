@@ -181,8 +181,15 @@ const ProjectNode = React.memo(({ data, selected }: NodeProps) => {
     }, [data?.label]);
 
     const handleInputBlur = useCallback(async () => {
-        await saveValue();
-        setIsEditing(false);
+        console.log('[ProjectNode] Input blur triggered, saving and exiting edit mode');
+        try {
+            await saveValue();
+        } catch (error) {
+            console.error('[ProjectNode] Error saving on blur:', error);
+        } finally {
+            setIsEditing(false);
+            console.log('[ProjectNode] Edit mode exited via blur');
+        }
     }, [saveValue]);
 
     return (
@@ -290,8 +297,15 @@ const GroupNode = React.memo(({ data, selected }: NodeProps) => {
     }, [data?.label]);
 
     const handleInputBlur = useCallback(async () => {
-        await saveValue();
-        setIsEditing(false);
+        console.log('[GroupNode] Input blur triggered, saving and exiting edit mode');
+        try {
+            await saveValue();
+        } catch (error) {
+            console.error('[GroupNode] Error saving on blur:', error);
+        } finally {
+            setIsEditing(false);
+            console.log('[GroupNode] Edit mode exited via blur');
+        }
     }, [saveValue]);
 
     return (
@@ -458,8 +472,17 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
     }, [data?.label]);
 
     const handleInputBlur = useCallback(async () => {
-        await saveValue();
-        setIsEditing(false);
+        console.log('[TaskNode] Input blur triggered, saving and exiting edit mode');
+        try {
+            await saveValue();
+        } catch (error) {
+            console.error('[TaskNode] Error saving on blur:', error);
+        } finally {
+            // CRITICAL: Always exit edit mode, even if save fails
+            // This prevents "zombie state" where node is stuck in edit mode
+            setIsEditing(false);
+            console.log('[TaskNode] Edit mode exited via blur');
+        }
     }, [saveValue]);
 
     return (
