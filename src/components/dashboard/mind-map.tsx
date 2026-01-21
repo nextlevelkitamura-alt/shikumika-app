@@ -432,9 +432,51 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
 
     // REF: Focus queue - persists through dagre re-layouts
     const focusQueueRef = useRef<string | null>(null);
-    const focusAttemptRef = useRef(0);
 
-    // EFFECT: Detect new task and queue focus
+    // HELPER: Robust DOM polling focus function
+    // Monitors for target input element and focuses immediately when found
+    const focusNodeWithPolling = useCallback((targetId: string, maxDuration: number = 150) => {
+        const startTime = Date.now();
+
+        const attemptFocus = () => {
+            // Check if we've exceeded max duration
+            if (Date.now() - startTime > maxDuration) {
+                console.log('[MindMap] Focus polling timed out for:', targetId);
+                focusQueueRef.current = null;
+                return;
+            }
+
+            // Try to find the node's wrapper div first (for selection)
+            const nodeElement = document.querySelector(`[data-id="${targetId}"]`);
+            if (nodeElement) {
+                // Look for input inside the node (edit mode)
+                const inputElement = nodeElement.querySelector('input') as HTMLInputElement;
+                if (inputElement) {
+                    console.log('[MindMap] Focus success (input):', targetId);
+                    inputElement.focus();
+                    focusQueueRef.current = null;
+                    return;
+                }
+
+                // If no input, focus the wrapper (select mode trigger)
+                const wrapperElement = nodeElement.querySelector('[tabindex="0"]') as HTMLElement;
+                if (wrapperElement) {
+                    console.log('[MindMap] Focus success (wrapper):', targetId);
+                    wrapperElement.focus();
+                    focusQueueRef.current = null;
+                    return;
+                }
+            }
+
+            // Element not found yet, retry on next animation frame
+            requestAnimationFrame(attemptFocus);
+        };
+
+        // Start polling
+        requestAnimationFrame(attemptFocus);
+    }, []);
+
+    // EFFECT: Detect new task and queue focus with DOM polling
     useEffect(() => {
         const currentCount = tasks.length;
         const prevCount = prevTaskCountRef.current;
@@ -450,12 +492,14 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
             }, null as Task | null);
 
             if (newestTask) {
-                console.log('[MindMap] New task detected, queuing focus:', newestTask.id);
-                // Queue for focus - this persists through dagre re-layout
+                console.log('[MindMap] New task detected, starting DOM polling focus:', newestTask.id);
+                // Queue for focus and start polling
                 focusQueueRef.current = newestTask.id;
-                focusAttemptRef.current = 0;
                 setSelectedNodeId(newestTask.id);
                 setPendingEditNodeId(newestTask.id);
+
+                // Start DOM polling for focus
+                focusNodeWithPolling(newestTask.id);
             }
 
             // Reset the flag
@@ -464,32 +508,22 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
 
         // Update prev count
         prevTaskCountRef.current = currentCount;
-    }, [tasks]);
+    }, [tasks, focusNodeWithPolling]);
 
-    // EFFECT: Restore focus after dagre layout (triggered by pendingEditNodeId)
+    // EFFECT: Backup focus trigger when pendingEditNodeId changes
     useEffect(() => {
-        if (pendingEditNodeId && focusQueueRef.current) {
-            // Wait for dagre layout to complete, then trigger focus
-            const timer = setTimeout(() => {
-                // Re-set pendingEditNodeId to trigger TaskNode's triggerEdit
-                if (focusQueueRef.current && focusAttemptRef.current < 3) {
-                    focusAttemptRef.current++;
-                    setPendingEditNodeId(focusQueueRef.current);
-                }
-            }, 50);
-
-            return () => clearTimeout(timer);
+        if (pendingEditNodeId && focusQueueRef.current === pendingEditNodeId) {
+            // Additional polling attempt as backup
+            focusNodeWithPolling(pendingEditNodeId, 100);
         }
-    }, [pendingEditNodeId]);
+    }, [pendingEditNodeId, focusNodeWithPolling]);
 
-    // EFFECT: Clear focus queue after successful focus (longer timeout)
+    // EFFECT: Clear pendingEditNodeId after a delay
     useEffect(() => {
         if (pendingEditNodeId) {
             const timer = setTimeout(() => {
-                focusQueueRef.current = null;
-                focusAttemptRef.current = 0;
                 setPendingEditNodeId(null);
-            }, 500);
+            }, 300);
             return () => clearTimeout(timer);
         }
     }, [pendingEditNodeId]);
