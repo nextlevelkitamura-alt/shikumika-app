@@ -122,15 +122,98 @@ class MindMapErrorBoundary extends Component<{ children: ReactNode }, { hasError
 }
 
 // --- Custom Nodes ---
-const ProjectNode = React.memo(({ data, selected }: NodeProps) => (
-    <div className={cn(
-        "w-[180px] px-4 py-3 rounded-xl bg-primary text-primary-foreground font-bold text-center shadow-lg transition-all",
-        selected && "ring-2 ring-white ring-offset-2 ring-offset-background"
-    )}>
-        {data?.label ?? 'Project'}
-        <Handle type="source" position={Position.Right} className="!bg-primary-foreground" />
-    </div>
-));
+const ProjectNode = React.memo(({ data, selected }: NodeProps) => {
+    const [isEditing, setIsEditing] = useState(false);
+    const [editValue, setEditValue] = useState('');
+    const inputRef = useRef<HTMLInputElement>(null);
+    const wrapperRef = useRef<HTMLDivElement>(null);
+
+    // Auto-focus input when entering edit mode
+    useEffect(() => {
+        if (isEditing && inputRef.current) {
+            inputRef.current.focus();
+            inputRef.current.select();
+        }
+    }, [isEditing]);
+
+    // Auto-focus wrapper when selected
+    useEffect(() => {
+        if (selected && !isEditing && wrapperRef.current) {
+            wrapperRef.current.focus();
+        }
+    }, [selected, isEditing]);
+
+    const saveValue = useCallback(async () => {
+        const trimmed = editValue.trim();
+        if (trimmed && trimmed !== data?.label && data?.onSave) {
+            await data.onSave(trimmed);
+        }
+    }, [editValue, data]);
+
+    const handleInputKeyDown = useCallback(async (e: React.KeyboardEvent<HTMLInputElement>) => {
+        e.stopPropagation();
+        if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+            e.preventDefault();
+            await saveValue();
+            setIsEditing(false);
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            setEditValue(data?.label ?? '');
+            setIsEditing(false);
+        }
+    }, [saveValue, data?.label]);
+
+    const handleWrapperKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+        if (isEditing) return;
+        e.stopPropagation();
+
+        if (e.key === ' ' || e.key === 'F2') {
+            e.preventDefault();
+            setIsEditing(true);
+            setEditValue(data?.label ?? '');
+        }
+    }, [isEditing, data?.label]);
+
+    const handleDoubleClick = useCallback((e: React.MouseEvent) => {
+        e.stopPropagation();
+        setIsEditing(true);
+        setEditValue(data?.label ?? '');
+    }, [data?.label]);
+
+    const handleInputBlur = useCallback(async () => {
+        await saveValue();
+        setIsEditing(false);
+    }, [saveValue]);
+
+    return (
+        <div
+            ref={wrapperRef}
+            className={cn(
+                "w-[180px] px-4 py-3 rounded-xl bg-primary text-primary-foreground font-bold text-center shadow-lg transition-all outline-none",
+                selected && "ring-2 ring-white ring-offset-2 ring-offset-background"
+            )}
+            tabIndex={0}
+            onKeyDown={handleWrapperKeyDown}
+            onDoubleClick={handleDoubleClick}
+        >
+            {isEditing ? (
+                <input
+                    ref={inputRef}
+                    type="text"
+                    value={editValue}
+                    onChange={(e) => setEditValue(e.target.value)}
+                    onBlur={handleInputBlur}
+                    onKeyDown={handleInputKeyDown}
+                    onClick={(e) => e.stopPropagation()}
+                    className="nodrag nopan w-full bg-transparent border-none text-center font-bold focus:outline-none focus:ring-0 text-primary-foreground"
+                />
+            ) : (
+                data?.label ?? 'Project'
+            )}
+            <Handle type="source" position={Position.Right} className="!bg-primary-foreground" />
+        </div>
+    );
+});
 ProjectNode.displayName = 'ProjectNode';
 
 // GROUP NODE with keyboard support
@@ -598,7 +681,8 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
         const group = getGroupForTask(task);
         if (!group) return;
 
-        // Set flag BEFORE creating
+        // Set flag BEFORE creating (enables focus detection)
+        console.log('[MindMap] Creating sibling task, setting isCreatingNodeRef to true');
         isCreatingNodeRef.current = true;
 
         await onCreateTask(group.id, "", task.parent_task_id);
@@ -713,7 +797,14 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
             resultNodes.push({
                 id: 'project-root',
                 type: 'projectNode',
-                data: { label: project?.title ?? 'Project' },
+                data: {
+                    label: project?.title ?? 'Project',
+                    onSave: async (newTitle: string) => {
+                        console.log('[MindMap] Project title update requested:', newTitle);
+                        // TODO: Implement project title update via onUpdateProject callback
+                        // For now, this allows editing but doesn't persist to backend
+                    }
+                },
                 position: { x: 50, y: 200 },
                 selected: selectedNodeId === 'project-root',
             });
