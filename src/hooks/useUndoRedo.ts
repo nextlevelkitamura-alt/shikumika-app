@@ -10,14 +10,41 @@ export function useUndoRedo<T>(initialState: T, maxHistorySize: number = 50) {
     const [history, setHistory] = useState<HistoryState<T>[]>([{ state: initialState, timestamp: Date.now() }]);
     const [historyIndex, setHistoryIndex] = useState(0);
     const isUndoRedoRef = useRef(false);
+    const isInitialMountRef = useRef(true);
+    const prevInitialStateRef = useRef<T>(initialState);
 
     // Update current state when initial state changes (from external source)
+    // CRITICAL: Only update if initialState actually changed (deep comparison)
+    // This prevents infinite loops when initialState is a new object reference
     useEffect(() => {
+        // Skip on initial mount
+        if (isInitialMountRef.current) {
+            isInitialMountRef.current = false;
+            prevInitialStateRef.current = initialState;
+            return;
+        }
+
+        // Only update if state actually changed (not just reference)
         if (!isUndoRedoRef.current) {
-            setCurrentState(initialState);
-            // Reset history if external state changes (e.g., page reload)
-            setHistory([{ state: initialState, timestamp: Date.now() }]);
-            setHistoryIndex(0);
+            try {
+                const prevStr = JSON.stringify(prevInitialStateRef.current);
+                const currentStr = JSON.stringify(initialState);
+                if (prevStr !== currentStr) {
+                    setCurrentState(initialState);
+                    // Reset history if external state changes (e.g., page reload)
+                    setHistory([{ state: initialState, timestamp: Date.now() }]);
+                    setHistoryIndex(0);
+                    prevInitialStateRef.current = initialState;
+                }
+            } catch (e) {
+                // If JSON.stringify fails, only update if reference changed
+                if (prevInitialStateRef.current !== initialState) {
+                    setCurrentState(initialState);
+                    setHistory([{ state: initialState, timestamp: Date.now() }]);
+                    setHistoryIndex(0);
+                    prevInitialStateRef.current = initialState;
+                }
+            }
         }
         isUndoRedoRef.current = false;
     }, [initialState]);

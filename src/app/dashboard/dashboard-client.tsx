@@ -83,10 +83,12 @@ export function DashboardClient({
         tasks: Task[]
     }
     
-    const initialUndoState: UndoState = {
+    // CRITICAL: Memoize initialUndoState to prevent infinite loops
+    // Only recreate when projectGroupsInitial or projectTasksInitial actually change
+    const initialUndoState = useMemo<UndoState>(() => ({
         groups: projectGroupsInitial ?? [],
         tasks: projectTasksInitial ?? []
-    }
+    }), [projectGroupsInitial, projectTasksInitial])
 
     const {
         state: undoState,
@@ -97,22 +99,20 @@ export function DashboardClient({
         canRedo
     } = useUndoRedo<UndoState>(initialUndoState)
 
-    // Key to force remount when undoing
-    const [syncKey, setSyncKey] = useState(0)
-
-    // Use undo state or current initial state (include syncKey to force update)
+    // Use undo state or current initial state
     // Safety: ensure undoState exists and has required properties
+    // CRITICAL: Remove syncKey dependency to prevent infinite loops
     const effectiveGroups = useMemo(() => {
         if (!undoState || !undoState.groups) return projectGroupsInitial ?? []
         // Use undo state if it exists, otherwise fall back to initial
         return Array.isArray(undoState.groups) ? undoState.groups : projectGroupsInitial ?? []
-    }, [undoState, projectGroupsInitial, syncKey])
+    }, [undoState?.groups, projectGroupsInitial])
 
     const effectiveTasks = useMemo(() => {
         if (!undoState || !undoState.tasks) return projectTasksInitial ?? []
         // Use undo state if it exists, otherwise fall back to initial
         return Array.isArray(undoState.tasks) ? undoState.tasks : projectTasksInitial ?? []
-    }, [undoState, projectTasksInitial, syncKey])
+    }, [undoState?.tasks, projectTasksInitial])
 
     const {
         groups: currentGroups,
@@ -136,16 +136,13 @@ export function DashboardClient({
     // Don't auto-save to history - only save before operations
 
     // Handle Undo/Redo
+    // CRITICAL: Don't use syncKey - useMindMapSync will update automatically via initialGroups/initialTasks
     const handleUndo = useCallback(() => {
-        if (undo()) {
-            setSyncKey(prev => prev + 1)
-        }
+        undo()
     }, [undo])
 
     const handleRedo = useCallback(() => {
-        if (redo()) {
-            setSyncKey(prev => prev + 1)
-        }
+        redo()
     }, [redo])
 
     // Global keyboard handler for Command+Z / Command+Shift+Z

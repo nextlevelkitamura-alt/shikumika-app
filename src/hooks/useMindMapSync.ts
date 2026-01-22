@@ -41,9 +41,45 @@ export function useMindMapSync({
     const [groups, setGroups] = useState<TaskGroup[]>(initialGroups)
     const [tasks, setTasks] = useState<Task[]>(initialTasks)
     const [isLoading, setIsLoading] = useState(false)
+    const prevGroupsRef = useRef<TaskGroup[]>(initialGroups)
+    const prevTasksRef = useRef<Task[]>(initialTasks)
 
-    useEffect(() => { setGroups(initialGroups) }, [initialGroups])
-    useEffect(() => { setTasks(initialTasks) }, [initialTasks])
+    // CRITICAL: Only update if groups actually changed (deep comparison)
+    // This prevents infinite loops when initialGroups is a new array reference
+    useEffect(() => {
+        try {
+            const prevStr = JSON.stringify(prevGroupsRef.current.map(g => ({ id: g.id, title: g.title, order_index: g.order_index })))
+            const currentStr = JSON.stringify(initialGroups.map(g => ({ id: g.id, title: g.title, order_index: g.order_index })))
+            if (prevStr !== currentStr) {
+                setGroups(initialGroups)
+                prevGroupsRef.current = initialGroups
+            }
+        } catch (e) {
+            // If JSON.stringify fails, only update if reference changed
+            if (prevGroupsRef.current !== initialGroups) {
+                setGroups(initialGroups)
+                prevGroupsRef.current = initialGroups
+            }
+        }
+    }, [initialGroups])
+
+    // CRITICAL: Only update if tasks actually changed (deep comparison)
+    useEffect(() => {
+        try {
+            const prevStr = JSON.stringify(prevTasksRef.current.map(t => ({ id: t.id, title: t.title, status: t.status, group_id: t.group_id, parent_task_id: t.parent_task_id, order_index: t.order_index })))
+            const currentStr = JSON.stringify(initialTasks.map(t => ({ id: t.id, title: t.title, status: t.status, group_id: t.group_id, parent_task_id: t.parent_task_id, order_index: t.order_index })))
+            if (prevStr !== currentStr) {
+                setTasks(initialTasks)
+                prevTasksRef.current = initialTasks
+            }
+        } catch (e) {
+            // If JSON.stringify fails, only update if reference changed
+            if (prevTasksRef.current !== initialTasks) {
+                setTasks(initialTasks)
+                prevTasksRef.current = initialTasks
+            }
+        }
+    }, [initialTasks])
 
     // TEMPORARILY DISABLED REALTIME TO PREVENT CRASH
     // TODO: Re-enable with proper error handling once the root cause is identified
