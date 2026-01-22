@@ -411,6 +411,7 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
     const wrapperRef = useRef<HTMLDivElement>(null);
     const [isEditing, setIsEditing] = useState<boolean>(false);
     const [editValue, setEditValue] = useState<string>(data?.label ?? '');
+    const [showCaret, setShowCaret] = useState<boolean>(false);
 
     // Flag to prevent double-save when exiting via keyboard (Enter/Tab/Escape)
     const isSavingViaKeyboardRef = useRef(false);
@@ -436,16 +437,23 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
             // Use requestAnimationFrame to ensure DOM is ready
             requestAnimationFrame(() => {
                 inputRef.current?.focus();
-                const len = inputRef.current?.value.length ?? 0;
-                inputRef.current?.setSelectionRange(len, len);
+                if (!showCaret) {
+                    inputRef.current?.select();
+                } else {
+                    const len = inputRef.current?.value.length ?? 0;
+                    inputRef.current?.setSelectionRange(len, len);
+                }
             });
         }
-    }, [isEditing]);
+    }, [isEditing, showCaret]);
 
-    // Auto-focus wrapper when selected
+    // Auto-focus input when selected (IME-friendly first keystroke)
     useEffect(() => {
-        if (selected && !isEditing && wrapperRef.current) {
-            wrapperRef.current.focus();
+        if (selected && !isEditing && inputRef.current) {
+            requestAnimationFrame(() => {
+                inputRef.current?.focus();
+                inputRef.current?.select();
+            });
         }
     }, [selected, isEditing]);
 
@@ -483,34 +491,60 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
     const handleInputKeyDown = useCallback(async (e: React.KeyboardEvent<HTMLInputElement>) => {
         e.stopPropagation();
 
+        if (!isEditing) {
+            // Selection Mode behaviors (input is focused for IME-friendly first key)
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                if (data?.onAddChild) await data.onAddChild();
+                return;
+            }
+            if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                if (data?.onAddSibling) await data.onAddSibling();
+                return;
+            }
+            if (e.key === 'Delete' || e.key === 'Backspace') {
+                e.preventDefault();
+                if (data?.onDelete) await data.onDelete();
+                return;
+            }
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+                e.preventDefault();
+                if (data?.onNavigate) {
+                    data.onNavigate(e.key as 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight');
+                }
+                return;
+            }
+            if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                // IMPORTANT (IME): don't inject the first character into state.
+                // Let the input receive the key/composition naturally.
+                setIsEditing(true);
+                setShowCaret(false);
+                return;
+            }
+        }
+
         if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
-            // Xmind Protocol: Edit+Enter = Confirm -> Create Sibling
-            // This satisfies the "2-step" requirement (Confirm -> Create)
+            // Edit Mode + Enter = Confirm only (Selection Mode)
             e.preventDefault();
             e.stopPropagation();
 
-            // Set flag to prevent onBlur double-save
             isSavingViaKeyboardRef.current = true;
 
             await saveValue();
             setIsEditing(false);
+            setShowCaret(false);
 
-            // Trigger sibling creation immediately
-            // This bypasses the need for an extra Enter press
-            if (data?.onAddSibling) {
-                await data.onAddSibling();
-            }
-
-            // Reset keyboard flag
             setTimeout(() => { isSavingViaKeyboardRef.current = false; }, 0);
         } else if (e.key === 'Tab') {
-            // Xmind Protocol: Edit+Tab = Confirm + Create Child
+            // Edit Mode + Tab = Confirm + Create Child
             e.preventDefault();
 
             isSavingViaKeyboardRef.current = true;
 
             await saveValue();
             setIsEditing(false);
+            setShowCaret(false);
 
             if (data?.onAddChild) {
                 await data.onAddChild();
@@ -524,6 +558,7 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
             isSavingViaKeyboardRef.current = true;
             setEditValue(data?.label ?? '');
             exitEditMode();
+            setShowCaret(false);
             setTimeout(() => {
                 isSavingViaKeyboardRef.current = false;
             }, 0);
@@ -555,19 +590,23 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
                 data.onNavigate(e.key as 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight');
             }
         } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-            e.preventDefault();
+            // IMPORTANT (IME): don't inject the first character into state (causes "kあ").
+            // Focus input and allow native composition.
             setIsEditing(true);
-            setEditValue(e.key);
+            setShowCaret(false);
+            inputRef.current?.focus();
         }
     }, [isEditing, data]);
 
     const handleDoubleClick = useCallback((e: React.MouseEvent) => {
         e.stopPropagation();
         setIsEditing(true);
+        setShowCaret(true);
         setEditValue(data?.label ?? '');
     }, [data?.label]);
 
     const handleInputBlur = useCallback(async () => {
+        if (!isEditing) return;
         // Skip if exiting via keyboard (Enter/Tab/Escape already handled save)
         if (isSavingViaKeyboardRef.current) {
             console.log('[TaskNode] Blur skipped (keyboard exit)');
@@ -581,6 +620,7 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
             console.error('[TaskNode] Error saving on blur:', error);
         } finally {
             setIsEditing(false);
+            setShowCaret(false);
         }
     }, [saveValue]);
 
@@ -608,32 +648,32 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
             <Handle type="target" position={Position.Left} className="!bg-muted-foreground/50 !w-1 !h-1" />
             <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", data?.status === 'done' ? "bg-primary" : "bg-muted-foreground/30")} />
 
-            {isEditing ? (
-                <input
-                    ref={inputRef}
-                    type="text"
-                    value={editValue}
-                    onChange={(e) => setEditValue(e.target.value)}
-                    onBlur={handleInputBlur}
-                    onKeyDown={handleInputKeyDown}
-                    onClick={(e) => e.stopPropagation()}
-                    className="nodrag nopan flex-1 bg-transparent border-none text-xs focus:outline-none focus:ring-0 px-0.5 min-w-0"
-                    autoFocus
-                />
-            ) : (
-                // Keep an input mounted in selection mode so the first IME keystroke is not lost.
-                <input
-                    ref={inputRef}
-                    type="text"
-                    value={editValue}
-                    readOnly
-                    tabIndex={-1}
-                    className={cn(
-                        "nodrag nopan flex-1 bg-transparent border-none text-xs focus:outline-none focus:ring-0 px-0.5 min-w-0 cursor-default",
-                        data?.status === 'done' && "line-through text-muted-foreground"
-                    )}
-                />
-            )}
+            <input
+                ref={inputRef}
+                type="text"
+                value={editValue}
+                onChange={(e) => {
+                    if (!isEditing) {
+                        setIsEditing(true);
+                        setShowCaret(false);
+                    }
+                    setEditValue(e.target.value);
+                }}
+                onBlur={handleInputBlur}
+                onKeyDown={handleInputKeyDown}
+                onCompositionStart={() => {
+                    if (!isEditing) {
+                        setIsEditing(true);
+                        setShowCaret(false);
+                    }
+                }}
+                onClick={(e) => e.stopPropagation()}
+                className={cn(
+                    "nodrag nopan flex-1 bg-transparent border-none text-xs focus:outline-none focus:ring-0 px-0.5 min-w-0",
+                    !showCaret && "caret-transparent",
+                    data?.status === 'done' && "line-through text-muted-foreground"
+                )}
+            />
 
             <Handle type="source" position={Position.Right} className="!bg-muted-foreground/50 !w-1 !h-1" />
         </div>
