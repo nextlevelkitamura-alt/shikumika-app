@@ -129,17 +129,29 @@ class MindMapErrorBoundary extends Component<{ children: ReactNode }, { hasError
 // --- Custom Nodes ---
 const ProjectNode = React.memo(({ data, selected }: NodeProps) => {
     const [isEditing, setIsEditing] = useState(false);
-    const [editValue, setEditValue] = useState('');
+    const [editValue, setEditValue] = useState(data?.label ?? '');
     const inputRef = useRef<HTMLInputElement>(null);
     const wrapperRef = useRef<HTMLDivElement>(null);
 
-    // Auto-focus input when entering edit mode
+    // Sync label when not editing
     useEffect(() => {
-        if (isEditing && inputRef.current) {
-            inputRef.current.focus();
-            inputRef.current.select();
+        if (!isEditing) {
+            setEditValue(data?.label ?? '');
         }
-    }, [isEditing]);
+    }, [data?.label, isEditing]);
+
+    // Auto-focus input when selected or entering edit mode
+    // IMPORTANT: keep the same <input> mounted while selected so the first keystroke is not lost (IME-friendly)
+    useEffect(() => {
+        if (!selected || !inputRef.current) return;
+        requestAnimationFrame(() => {
+            inputRef.current?.focus();
+            if (!isEditing) {
+                // Selection mode: select all for quick replace (doesn't break IME when input is already focused)
+                inputRef.current?.select();
+            }
+        });
+    }, [selected, isEditing]);
 
     // Auto-focus wrapper when selected
     useEffect(() => {
@@ -157,6 +169,32 @@ const ProjectNode = React.memo(({ data, selected }: NodeProps) => {
 
     const handleInputKeyDown = useCallback(async (e: React.KeyboardEvent<HTMLInputElement>) => {
         e.stopPropagation();
+        if (!isEditing) {
+            // Selection Mode behaviors for Project (root) node:
+            // - Typing starts editing immediately (IME-compatible because input is already focused)
+            // - Delete/Backspace triggers delete confirmation (same as before)
+            if (e.key === 'Delete' || e.key === 'Backspace') {
+                e.preventDefault();
+                const confirmed = window.confirm(
+                    `プロジェクト「${data?.label ?? 'このプロジェクト'}」を削除しますか？\n\nこの操作は取り消せません。`
+                );
+                if (confirmed && data?.onDelete) {
+                    data.onDelete();
+                }
+                return;
+            }
+            if (e.key === 'F2' || e.key === ' ') {
+                e.preventDefault();
+                setIsEditing(true);
+                return;
+            }
+            if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                // Do NOT preventDefault: allow the key/composition to flow into the already-focused input
+                setIsEditing(true);
+                return;
+            }
+        }
+
         if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
             e.preventDefault();
             await saveValue();
@@ -185,6 +223,9 @@ const ProjectNode = React.memo(({ data, selected }: NodeProps) => {
             if (confirmed && data?.onDelete) {
                 data.onDelete();
             }
+        } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+            // Start editing on typing (fallback in case wrapper has focus)
+            setIsEditing(true);
         }
     }, [isEditing, data]);
 
@@ -217,7 +258,7 @@ const ProjectNode = React.memo(({ data, selected }: NodeProps) => {
             onKeyDown={handleWrapperKeyDown}
             onDoubleClick={handleDoubleClick}
         >
-            {isEditing ? (
+            {(selected || isEditing) ? (
                 <input
                     ref={inputRef}
                     type="text"
@@ -225,7 +266,10 @@ const ProjectNode = React.memo(({ data, selected }: NodeProps) => {
                     onChange={(e) => setEditValue(e.target.value)}
                     onBlur={handleInputBlur}
                     onKeyDown={handleInputKeyDown}
-                    onClick={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                        // In selection mode we allow bubbling so ReactFlow can select the node on click.
+                        if (isEditing) e.stopPropagation();
+                    }}
                     className="nodrag nopan w-full bg-transparent border-none text-center font-bold focus:outline-none focus:ring-0 text-primary-foreground"
                 />
             ) : (
