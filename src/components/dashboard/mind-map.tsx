@@ -154,10 +154,13 @@ const ProjectNode = React.memo(({ data, selected }: NodeProps) => {
         });
     }, [selected, isEditing]);
 
-    // Auto-focus wrapper when selected
+    // Auto-focus input when selected (IME-friendly first keystroke)
     useEffect(() => {
-        if (selected && !isEditing && wrapperRef.current) {
-            wrapperRef.current.focus();
+        if (selected && !isEditing && inputRef.current) {
+            requestAnimationFrame(() => {
+                inputRef.current?.focus();
+                inputRef.current?.select();
+            });
         }
     }, [selected, isEditing]);
 
@@ -345,9 +348,9 @@ const GroupNode = React.memo(({ data, selected }: NodeProps) => {
             setIsEditing(true);
             setEditValue(data?.label ?? '');
         } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-            e.preventDefault();
+            // IMPORTANT (IME): don't inject the first character into state (causes "kあ").
+            // The input is already focused while selected, so IME can start composition normally.
             setIsEditing(true);
-            setEditValue(e.key);
         }
     }, [isEditing, data]);
 
@@ -581,11 +584,12 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
         }
     }, [saveValue]);
 
-    // Ensure focus when clicked (fixes Delete key not working after clicking)
+    // Ensure focus when clicked (IME-friendly)
     const handleWrapperClick = useCallback((e: React.MouseEvent) => {
         e.stopPropagation();
-        if (!isEditing && wrapperRef.current) {
-            wrapperRef.current.focus();
+        if (!isEditing) {
+            inputRef.current?.focus();
+            inputRef.current?.select();
         }
     }, [isEditing]);
 
@@ -617,9 +621,18 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
                     autoFocus
                 />
             ) : (
-                <span className={cn("flex-1 truncate px-0.5", data?.status === 'done' && "line-through text-muted-foreground")}>
-                    {data?.label ?? 'Task'}
-                </span>
+                // Keep an input mounted in selection mode so the first IME keystroke is not lost.
+                <input
+                    ref={inputRef}
+                    type="text"
+                    value={editValue}
+                    readOnly
+                    tabIndex={-1}
+                    className={cn(
+                        "nodrag nopan flex-1 bg-transparent border-none text-xs focus:outline-none focus:ring-0 px-0.5 min-w-0 cursor-default",
+                        data?.status === 'done' && "line-through text-muted-foreground"
+                    )}
+                />
             )}
 
             <Handle type="source" position={Position.Right} className="!bg-muted-foreground/50 !w-1 !h-1" />
