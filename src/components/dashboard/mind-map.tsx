@@ -413,7 +413,6 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
     const [isEditing, setIsEditing] = useState<boolean>(false);
     const [editValue, setEditValue] = useState<string>(data?.label ?? '');
     const [showCaret, setShowCaret] = useState<boolean>(false);
-    const [showCaret, setShowCaret] = useState<boolean>(false);
 
     // Flag to prevent double-save when exiting via keyboard (Enter/Tab/Escape)
     const isSavingViaKeyboardRef = useRef(false);
