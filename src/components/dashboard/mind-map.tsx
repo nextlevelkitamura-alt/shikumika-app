@@ -176,6 +176,7 @@ const ProjectNode = React.memo(({ data, selected }: NodeProps) => {
             // - Delete/Backspace triggers delete confirmation (same as before)
             if (e.key === 'Delete' || e.key === 'Backspace') {
                 e.preventDefault();
+                if (typeof window === 'undefined') return;
                 const confirmed = window.confirm(
                     `プロジェクト「${data?.label ?? 'このプロジェクト'}」を削除しますか？\n\nこの操作は取り消せません。`
                 );
@@ -218,6 +219,7 @@ const ProjectNode = React.memo(({ data, selected }: NodeProps) => {
         } else if (e.key === 'Delete' || e.key === 'Backspace') {
             // ROOT NODE DELETE: Require confirmation
             e.preventDefault();
+            if (typeof window === 'undefined') return;
             const confirmed = window.confirm(
                 `プロジェクト「${data?.label ?? 'このプロジェクト'}」を削除しますか？\n\nこの操作は取り消せません。`
             );
@@ -914,6 +916,7 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
         if (!onDeleteTask) return;
 
         if (hasChildren(taskId)) {
+            if (typeof window === 'undefined') return;
             const confirmed = window.confirm('子タスクを含むタスクを削除しますか？\nすべての子タスクも削除されます。');
             if (!confirmed) return;
         }
@@ -1171,6 +1174,7 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
             event.preventDefault();
 
             const anyHasChildren = selectedTaskIds.some(id => hasChildren(id));
+            if (typeof window === 'undefined') return;
             const confirmed = window.confirm(
                 anyHasChildren
                     ? `選択した${selectedTaskIds.length}件のタスクを削除しますか？\n子タスクがあるものは子タスクも削除されます。`
