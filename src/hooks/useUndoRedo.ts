@@ -25,13 +25,27 @@ export function useUndoRedo<T>(initialState: T, maxHistorySize: number = 50) {
     // Save state to history before making changes
     const saveToHistory = useCallback((newState: T, skipIfSame: boolean = true) => {
         if (isUndoRedoRef.current) return; // Don't save during undo/redo
+        
+        // Safety check
+        if (!newState) return;
 
         // Skip if state hasn't changed (deep comparison would be expensive, so we rely on caller)
-        if (skipIfSame && JSON.stringify(currentState) === JSON.stringify(newState)) {
-            return;
+        if (skipIfSame && currentState) {
+            try {
+                if (JSON.stringify(currentState) === JSON.stringify(newState)) {
+                    return;
+                }
+            } catch (e) {
+                // If JSON.stringify fails (circular refs, etc), just proceed
+                console.warn('[useUndoRedo] JSON.stringify failed, proceeding anyway:', e);
+            }
         }
 
         setHistory(prev => {
+            if (!prev || prev.length === 0) {
+                return [{ state: newState, timestamp: Date.now() }];
+            }
+            
             // Remove any "future" history if we're not at the end
             const newHistory = prev.slice(0, historyIndex + 1);
             
@@ -41,8 +55,6 @@ export function useUndoRedo<T>(initialState: T, maxHistorySize: number = 50) {
             // Limit history size
             if (newHistory.length > maxHistorySize) {
                 newHistory.shift();
-            } else {
-                return newHistory;
             }
             
             return newHistory;
@@ -58,11 +70,13 @@ export function useUndoRedo<T>(initialState: T, maxHistorySize: number = 50) {
 
     // Undo: Go back to previous state
     const undo = useCallback(() => {
-        if (historyIndex <= 0) return false; // No history to undo
+        if (historyIndex <= 0 || !history || history.length === 0) return false; // No history to undo
         
         isUndoRedoRef.current = true;
         const prevIndex = historyIndex - 1;
         const prevState = history[prevIndex];
+        
+        if (!prevState || !prevState.state) return false;
         
         setHistoryIndex(prevIndex);
         setCurrentState(prevState.state);
@@ -72,11 +86,13 @@ export function useUndoRedo<T>(initialState: T, maxHistorySize: number = 50) {
 
     // Redo: Go forward to next state
     const redo = useCallback(() => {
-        if (historyIndex >= history.length - 1) return false; // No future to redo
+        if (!history || history.length === 0 || historyIndex >= history.length - 1) return false; // No future to redo
         
         isUndoRedoRef.current = true;
         const nextIndex = historyIndex + 1;
         const nextState = history[nextIndex];
+        
+        if (!nextState || !nextState.state) return false;
         
         setHistoryIndex(nextIndex);
         setCurrentState(nextState.state);

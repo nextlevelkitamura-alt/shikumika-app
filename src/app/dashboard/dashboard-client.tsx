@@ -84,8 +84,8 @@ export function DashboardClient({
     }
     
     const initialUndoState: UndoState = {
-        groups: projectGroupsInitial,
-        tasks: projectTasksInitial
+        groups: projectGroupsInitial ?? [],
+        tasks: projectTasksInitial ?? []
     }
 
     const {
@@ -101,13 +101,18 @@ export function DashboardClient({
     const [syncKey, setSyncKey] = useState(0)
 
     // Use undo state or current initial state (include syncKey to force update)
+    // Safety: ensure undoState exists and has required properties
     const effectiveGroups = useMemo(() => {
-        return undoState.groups.length > 0 ? undoState.groups : projectGroupsInitial
-    }, [undoState.groups, projectGroupsInitial, syncKey])
+        if (!undoState || !undoState.groups) return projectGroupsInitial ?? []
+        // Use undo state if it exists, otherwise fall back to initial
+        return Array.isArray(undoState.groups) ? undoState.groups : projectGroupsInitial ?? []
+    }, [undoState, projectGroupsInitial, syncKey])
 
     const effectiveTasks = useMemo(() => {
-        return undoState.tasks.length > 0 ? undoState.tasks : projectTasksInitial
-    }, [undoState.tasks, projectTasksInitial, syncKey])
+        if (!undoState || !undoState.tasks) return projectTasksInitial ?? []
+        // Use undo state if it exists, otherwise fall back to initial
+        return Array.isArray(undoState.tasks) ? undoState.tasks : projectTasksInitial ?? []
+    }, [undoState, projectTasksInitial, syncKey])
 
     const {
         groups: currentGroups,
@@ -165,7 +170,7 @@ export function DashboardClient({
     // STABLE handlers using useCallback (with undo state saving)
     const handleCreateGroup = useCallback(async (title: string) => {
         // Save state before operation
-        saveUndoState({ groups: currentGroups, tasks: currentTasks })
+        saveUndoState({ groups: currentGroups ?? [], tasks: currentTasks ?? [] }, false)
         await createGroup(title)
     }, [createGroup, currentGroups, currentTasks, saveUndoState])
 
@@ -181,38 +186,38 @@ export function DashboardClient({
 
     const handleUpdateGroupTitle = useCallback(async (groupId: string, newTitle: string) => {
         // Save state before operation
-        saveUndoState({ groups: currentGroups, tasks: currentTasks })
+        saveUndoState({ groups: currentGroups ?? [], tasks: currentTasks ?? [] }, false)
         await updateGroupTitle(groupId, newTitle)
     }, [updateGroupTitle, currentGroups, currentTasks, saveUndoState])
 
     const handleDeleteGroup = useCallback(async (groupId: string) => {
         // Save state before operation
-        saveUndoState({ groups: currentGroups, tasks: currentTasks })
+        saveUndoState({ groups: currentGroups ?? [], tasks: currentTasks ?? [] }, false)
         await deleteGroup(groupId)
     }, [deleteGroup, currentGroups, currentTasks, saveUndoState])
 
     // Wrap task operations with undo state saving
     const handleCreateTask = useCallback(async (groupId: string, title?: string, parentTaskId?: string | null) => {
         // Save state before operation
-        saveUndoState({ groups: currentGroups, tasks: currentTasks })
+        saveUndoState({ groups: currentGroups ?? [], tasks: currentTasks ?? [] }, false)
         return await createTask(groupId, title, parentTaskId)
     }, [createTask, currentGroups, currentTasks, saveUndoState])
 
     const handleUpdateTask = useCallback(async (taskId: string, updates: Partial<Task>) => {
         // Save state before operation
-        saveUndoState({ groups: currentGroups, tasks: currentTasks })
+        saveUndoState({ groups: currentGroups ?? [], tasks: currentTasks ?? [] }, false)
         await updateTask(taskId, updates)
     }, [updateTask, currentGroups, currentTasks, saveUndoState])
 
     const handleDeleteTask = useCallback(async (taskId: string) => {
         // Save state before operation
-        saveUndoState({ groups: currentGroups, tasks: currentTasks })
+        saveUndoState({ groups: currentGroups ?? [], tasks: currentTasks ?? [] }, false)
         await deleteTask(taskId)
     }, [deleteTask, currentGroups, currentTasks, saveUndoState])
 
     const handleMoveTask = useCallback(async (taskId: string, newGroupId: string) => {
         // Save state before operation
-        saveUndoState({ groups: currentGroups, tasks: currentTasks })
+        saveUndoState({ groups: currentGroups ?? [], tasks: currentTasks ?? [] }, false)
         await moveTask(taskId, newGroupId)
     }, [moveTask, currentGroups, currentTasks, saveUndoState])
 
