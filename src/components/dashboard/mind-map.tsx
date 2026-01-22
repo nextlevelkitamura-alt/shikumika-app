@@ -12,6 +12,7 @@ import ReactFlow, {
     NodeProps,
     ReactFlowProvider,
     NodeMouseHandler,
+    SelectionMode,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import dagre from 'dagre';
@@ -657,6 +658,7 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
 
     // STATE
     const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+    const [selectedNodeIds, setSelectedNodeIds] = useState<Set<string>>(new Set());
     const [pendingEditNodeId, setPendingEditNodeId] = useState<string | null>(null);
 
     // REF: Flag to indicate we're waiting for a new node
@@ -919,6 +921,7 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
         const nextFocusId = calculateNextFocus(taskId);
         await onDeleteTask(taskId);
         setSelectedNodeId(nextFocusId);
+        setSelectedNodeIds(nextFocusId ? new Set([nextFocusId]) : new Set());
     }, [hasChildren, calculateNextFocus, onDeleteTask]);
 
     // Navigation helpers for arrow keys
@@ -1031,7 +1034,7 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
                     }
                 },
                 position: { x: 50, y: 200 },
-                selected: selectedNodeId === 'project-root',
+                selected: selectedNodeIds.has('project-root'),
             });
 
             const safeGroups = parsedGroups.filter(g => g?.id);
@@ -1090,7 +1093,7 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
                         onNavigate: (direction: 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight') => handleNavigate(task.id, direction),
                     },
                     position: { x: xPos, y: yOffsetRef.current },
-                    selected: selectedNodeId === task.id,
+                    selected: selectedNodeIds.has(task.id),
                 });
                 resultEdges.push({
                     id: `e-${parentId}-${task.id}`,
@@ -1122,7 +1125,7 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
                         onDelete: () => onDeleteGroup?.(group.id),
                     },
                     position: { x: 300, y: groupY },
-                    selected: selectedNodeId === group.id,
+                    selected: selectedNodeIds.has(group.id),
                 });
                 resultEdges.push({ id: `e-proj-${group.id}`, source: 'project-root', target: group.id, type: 'smoothstep' });
 
@@ -1141,12 +1144,68 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
 
         // Apply dagre layout to get optimal positions
         return getLayoutedElements(resultNodes, resultEdges);
-    }, [projectId, groupsJson, tasksJson, project?.title, selectedNodeId, shouldTriggerEdit, saveTaskTitle, addChildTask, addSiblingTask, deleteTask, onUpdateGroupTitle, onDeleteGroup]);
+    }, [projectId, groupsJson, tasksJson, project?.title, selectedNodeIds, shouldTriggerEdit, saveTaskTitle, addChildTask, addSiblingTask, deleteTask, onUpdateGroupTitle, onDeleteGroup]);
 
-    const handleNodeClick: NodeMouseHandler = useCallback((_, node) => setSelectedNodeId(node.id), []);
-    const handlePaneClick = useCallback(() => setSelectedNodeId(null), []);
+    const handleNodeClick: NodeMouseHandler = useCallback((_, node) => {
+        setSelectedNodeId(node.id);
+        setSelectedNodeIds(new Set([node.id]));
+    }, []);
+    const handlePaneClick = useCallback(() => {
+        setSelectedNodeId(null);
+        setSelectedNodeIds(new Set());
+    }, []);
+
+    const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[] }) => {
+        const ids = new Set(params.nodes.map(n => n.id));
+        setSelectedNodeIds(ids);
+        setSelectedNodeId(params.nodes[0]?.id ?? null);
+    }, []);
 
     const handleContainerKeyDown = useCallback(async (event: React.KeyboardEvent) => {
+        // Bulk delete: drag-selection -> Delete/Backspace removes selected tasks
+        if ((event.key === 'Delete' || event.key === 'Backspace') && selectedNodeIds.size > 0) {
+            const taskById = new Map(tasks.map(t => [t.id, t]));
+            const selectedTaskIds = Array.from(selectedNodeIds).filter(id => taskById.has(id));
+            if (selectedTaskIds.length === 0) return;
+
+            event.preventDefault();
+
+            const anyHasChildren = selectedTaskIds.some(id => hasChildren(id));
+            const confirmed = window.confirm(
+                anyHasChildren
+                    ? `選択した${selectedTaskIds.length}件のタスクを削除しますか？\n子タスクがあるものは子タスクも削除されます。`
+                    : `選択した${selectedTaskIds.length}件のタスクを削除しますか？`
+            );
+            if (!confirmed) return;
+            if (!onDeleteTask) return;
+
+            const depth = (id: string) => {
+                let d = 0;
+                let cur = taskById.get(id);
+                const visited = new Set<string>();
+                while (cur?.parent_task_id && taskById.has(cur.parent_task_id) && !visited.has(cur.parent_task_id)) {
+                    visited.add(cur.parent_task_id);
+                    d++;
+                    cur = taskById.get(cur.parent_task_id);
+                    if (d > 20) break;
+                }
+                return d;
+            };
+            selectedTaskIds.sort((a, b) => depth(b) - depth(a));
+
+            for (const id of selectedTaskIds) {
+                try {
+                    await onDeleteTask(id);
+                } catch (e) {
+                    console.warn('[MindMap] Bulk delete failed (ignored):', id, e);
+                }
+            }
+
+            setSelectedNodeId(null);
+            setSelectedNodeIds(new Set());
+            return;
+        }
+
         if (!selectedNodeId) return;
         const isGroupNode = groups.some(g => g.id === selectedNodeId);
         if (!isGroupNode) return;
@@ -1164,7 +1223,7 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
                 onCreateGroup("New Group");
             }
         }
-    }, [selectedNodeId, groups, onCreateTask, onCreateGroup]);
+    }, [selectedNodeId, selectedNodeIds, tasks, groups, hasChildren, onDeleteTask, onCreateTask, onCreateGroup]);
 
     return (
         <div className="w-full h-full bg-muted/5 relative outline-none" tabIndex={0} onKeyDown={handleContainerKeyDown}>
@@ -1175,11 +1234,15 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
                 defaultViewport={defaultViewport}
                 onNodeClick={handleNodeClick}
                 onPaneClick={handlePaneClick}
+                onSelectionChange={handleSelectionChange}
                 fitView
                 fitViewOptions={{ padding: 0.2 }}
                 deleteKeyCode={null}
                 nodesConnectable={false}
                 nodesDraggable={false}
+                selectionOnDrag={true}
+                selectionMode={SelectionMode.Partial}
+                panOnDrag={[1, 2]}
                 panOnScroll={true}
                 zoomOnScroll={true}
                 minZoom={0.5}
