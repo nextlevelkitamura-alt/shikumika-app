@@ -346,6 +346,7 @@ const GroupNode = React.memo(({ data, selected }: NodeProps) => {
         } else if (e.key === 'F2') {
             e.preventDefault();
             setIsEditing(true);
+            setShowCaret(true);
             setEditValue(data?.label ?? '');
         } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
             // IMPORTANT (IME): don't inject the first character into state (causes "kあ").
@@ -411,6 +412,7 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
     const wrapperRef = useRef<HTMLDivElement>(null);
     const [isEditing, setIsEditing] = useState<boolean>(false);
     const [editValue, setEditValue] = useState<string>(data?.label ?? '');
+    const [showCaret, setShowCaret] = useState<boolean>(false);
     const [showCaret, setShowCaret] = useState<boolean>(false);
 
     // Flag to prevent double-save when exiting via keyboard (Enter/Tab/Escape)
@@ -603,6 +605,10 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
         setIsEditing(true);
         setShowCaret(true);
         setEditValue(data?.label ?? '');
+        requestAnimationFrame(() => {
+            const len = inputRef.current?.value.length ?? 0;
+            inputRef.current?.setSelectionRange(len, len);
+        });
     }, [data?.label]);
 
     const handleInputBlur = useCallback(async () => {
@@ -630,6 +636,7 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
         if (!isEditing) {
             inputRef.current?.focus();
             inputRef.current?.select();
+            setShowCaret(false);
         }
     }, [isEditing]);
 
@@ -667,7 +674,11 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
                         setShowCaret(false);
                     }
                 }}
-                onClick={(e) => e.stopPropagation()}
+                onMouseDown={(e) => {
+                    if (!showCaret) {
+                        e.preventDefault(); // avoid text selection in Selection Mode
+                    }
+                }}
                 className={cn(
                     "nodrag nopan flex-1 bg-transparent border-none text-xs focus:outline-none focus:ring-0 px-0.5 min-w-0",
                     !showCaret && "caret-transparent",
