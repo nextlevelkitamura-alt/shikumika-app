@@ -1037,7 +1037,6 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
                     }
                 },
                 position: { x: 50, y: 200 },
-                selected: selectedNodeIds.has('project-root'),
             });
 
             const safeGroups = parsedGroups.filter(g => g?.id);
@@ -1096,7 +1095,6 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
                         onNavigate: (direction: 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight') => handleNavigate(task.id, direction),
                     },
                     position: { x: xPos, y: yOffsetRef.current },
-                    selected: selectedNodeIds.has(task.id),
                 });
                 resultEdges.push({
                     id: `e-${parentId}-${task.id}`,
@@ -1128,7 +1126,6 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
                         onDelete: () => onDeleteGroup?.(group.id),
                     },
                     position: { x: 300, y: groupY },
-                    selected: selectedNodeIds.has(group.id),
                 });
                 resultEdges.push({ id: `e-proj-${group.id}`, source: 'project-root', target: group.id, type: 'smoothstep' });
 
@@ -1147,7 +1144,7 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
 
         // Apply dagre layout to get optimal positions
         return getLayoutedElements(resultNodes, resultEdges);
-    }, [projectId, groupsJson, tasksJson, project?.title, selectedNodeIds, shouldTriggerEdit, saveTaskTitle, addChildTask, addSiblingTask, deleteTask, onUpdateGroupTitle, onDeleteGroup]);
+    }, [projectId, groupsJson, tasksJson, project?.title, shouldTriggerEdit, saveTaskTitle, addChildTask, addSiblingTask, deleteTask, onUpdateGroupTitle, onDeleteGroup]);
 
     const handleNodeClick: NodeMouseHandler = useCallback((_, node) => {
         setSelectedNodeId(node.id);
@@ -1159,8 +1156,19 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
     }, []);
 
     const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[] }) => {
-        const ids = new Set(params.nodes.map(n => n.id));
-        setSelectedNodeIds(ids);
+        // IMPORTANT: Do NOT feed selection back into the `nodes` prop via `selected: ...`
+        // ReactFlow should own selection UI state. We only track selected IDs for bulk actions.
+        const nextIds = new Set(params.nodes.map(n => n.id));
+        setSelectedNodeIds((prev) => {
+            if (prev.size === nextIds.size) {
+                let same = true;
+                for (const id of prev) {
+                    if (!nextIds.has(id)) { same = false; break; }
+                }
+                if (same) return prev; // avoid re-render loops
+            }
+            return nextIds;
+        });
         setSelectedNodeId(params.nodes[0]?.id ?? null);
     }, []);
 
