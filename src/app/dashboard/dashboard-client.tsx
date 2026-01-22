@@ -7,6 +7,7 @@ import { RightSidebar } from "@/components/dashboard/right-sidebar"
 import { Database } from "@/types/database"
 import { useMindMapSync } from "@/hooks/useMindMapSync"
 import { TimerProvider } from "@/contexts/TimerContext"
+import { useUndoRedo } from "@/hooks/useUndoRedo"
 
 type Goal = Database['public']['Tables']['goals']['Row']
 type Project = Database['public']['Tables']['projects']['Row']
@@ -76,6 +77,38 @@ export function DashboardClient({
         return initialTasks.filter(t => groupIds.has(t.group_id))
     }, [initialTasks, projectGroupsInitial])
 
+    // Undo/Redo state management
+    interface UndoState {
+        groups: TaskGroup[]
+        tasks: Task[]
+    }
+    
+    const initialUndoState: UndoState = {
+        groups: projectGroupsInitial,
+        tasks: projectTasksInitial
+    }
+
+    const {
+        state: undoState,
+        setState: saveUndoState,
+        undo,
+        redo,
+        canUndo,
+        canRedo
+    } = useUndoRedo<UndoState>(initialUndoState)
+
+    // Key to force remount when undoing
+    const [syncKey, setSyncKey] = useState(0)
+
+    // Use undo state or current initial state (include syncKey to force update)
+    const effectiveGroups = useMemo(() => {
+        return undoState.groups.length > 0 ? undoState.groups : projectGroupsInitial
+    }, [undoState.groups, projectGroupsInitial, syncKey])
+
+    const effectiveTasks = useMemo(() => {
+        return undoState.tasks.length > 0 ? undoState.tasks : projectTasksInitial
+    }, [undoState.tasks, projectTasksInitial, syncKey])
+
     const {
         groups: currentGroups,
         tasks: currentTasks,
@@ -91,14 +124,50 @@ export function DashboardClient({
     } = useMindMapSync({
         projectId: selectedProjectId,
         userId,
-        initialGroups: projectGroupsInitial,
-        initialTasks: projectTasksInitial
+        initialGroups: effectiveGroups,
+        initialTasks: effectiveTasks
     })
 
-    // STABLE handlers using useCallback
+    // Don't auto-save to history - only save before operations
+
+    // Handle Undo/Redo
+    const handleUndo = useCallback(() => {
+        if (undo()) {
+            setSyncKey(prev => prev + 1)
+        }
+    }, [undo])
+
+    const handleRedo = useCallback(() => {
+        if (redo()) {
+            setSyncKey(prev => prev + 1)
+        }
+    }, [redo])
+
+    // Global keyboard handler for Command+Z / Command+Shift+Z
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // Command+Z (Mac) or Ctrl+Z (Windows/Linux)
+            if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
+                e.preventDefault()
+                handleUndo()
+            }
+            // Command+Shift+Z (Mac) or Ctrl+Y (Windows/Linux) for Redo
+            if ((e.metaKey || e.ctrlKey) && (e.shiftKey && e.key === 'z' || e.key === 'y')) {
+                e.preventDefault()
+                handleRedo()
+            }
+        }
+
+        window.addEventListener('keydown', handleKeyDown)
+        return () => window.removeEventListener('keydown', handleKeyDown)
+    }, [handleUndo, handleRedo])
+
+    // STABLE handlers using useCallback (with undo state saving)
     const handleCreateGroup = useCallback(async (title: string) => {
+        // Save state before operation
+        saveUndoState({ groups: currentGroups, tasks: currentTasks })
         await createGroup(title)
-    }, [createGroup])
+    }, [createGroup, currentGroups, currentTasks, saveUndoState])
 
     const handleUpdateProjectTitle = useCallback(async (projectId: string, newTitle: string) => {
         // Optimistic update local state
@@ -111,12 +180,41 @@ export function DashboardClient({
     }, [updateProjectTitle])
 
     const handleUpdateGroupTitle = useCallback(async (groupId: string, newTitle: string) => {
+        // Save state before operation
+        saveUndoState({ groups: currentGroups, tasks: currentTasks })
         await updateGroupTitle(groupId, newTitle)
-    }, [updateGroupTitle])
+    }, [updateGroupTitle, currentGroups, currentTasks, saveUndoState])
 
     const handleDeleteGroup = useCallback(async (groupId: string) => {
+        // Save state before operation
+        saveUndoState({ groups: currentGroups, tasks: currentTasks })
         await deleteGroup(groupId)
-    }, [deleteGroup])
+    }, [deleteGroup, currentGroups, currentTasks, saveUndoState])
+
+    // Wrap task operations with undo state saving
+    const handleCreateTask = useCallback(async (groupId: string, title?: string, parentTaskId?: string | null) => {
+        // Save state before operation
+        saveUndoState({ groups: currentGroups, tasks: currentTasks })
+        return await createTask(groupId, title, parentTaskId)
+    }, [createTask, currentGroups, currentTasks, saveUndoState])
+
+    const handleUpdateTask = useCallback(async (taskId: string, updates: Partial<Task>) => {
+        // Save state before operation
+        saveUndoState({ groups: currentGroups, tasks: currentTasks })
+        await updateTask(taskId, updates)
+    }, [updateTask, currentGroups, currentTasks, saveUndoState])
+
+    const handleDeleteTask = useCallback(async (taskId: string) => {
+        // Save state before operation
+        saveUndoState({ groups: currentGroups, tasks: currentTasks })
+        await deleteTask(taskId)
+    }, [deleteTask, currentGroups, currentTasks, saveUndoState])
+
+    const handleMoveTask = useCallback(async (taskId: string, newGroupId: string) => {
+        // Save state before operation
+        saveUndoState({ groups: currentGroups, tasks: currentTasks })
+        await moveTask(taskId, newGroupId)
+    }, [moveTask, currentGroups, currentTasks, saveUndoState])
 
     // Resizable Sidebar State
     const [leftSidebarWidth, setLeftSidebarWidth] = useState(280)
@@ -202,10 +300,10 @@ export function DashboardClient({
                         onUpdateProject={handleUpdateProjectTitle}
                         onCreateGroup={handleCreateGroup}
                         onDeleteGroup={handleDeleteGroup}
-                        onCreateTask={createTask}
-                        onUpdateTask={updateTask}
-                        onDeleteTask={deleteTask}
-                        onMoveTask={moveTask}
+                        onCreateTask={handleCreateTask}
+                        onUpdateTask={handleUpdateTask}
+                        onDeleteTask={handleDeleteTask}
+                        onMoveTask={handleMoveTask}
                     />
                 </div>
 
