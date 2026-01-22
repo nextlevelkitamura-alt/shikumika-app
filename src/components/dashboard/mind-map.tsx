@@ -594,7 +594,7 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
             ref={wrapperRef}
             className={cn(
                 "w-[140px] px-2 py-1.5 rounded bg-background border text-xs shadow-sm flex items-center gap-1 transition-all outline-none",
-                selected && "ring-2 ring-white ring-offset-1 ring-offset-background border-white"
+                (selected || data?.isSelected) && "ring-2 ring-sky-400 ring-offset-1 ring-offset-background border-sky-400 shadow-[0_0_0_2px_rgba(56,189,248,0.20)]"
             )}
             tabIndex={0}
             onKeyDown={handleWrapperKeyDown}
@@ -865,8 +865,12 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
 
         const currentIndex = allSiblings.findIndex(t => t.id === taskId);
 
+        // Delete focus order:
+        // - If an upper sibling exists -> move up
+        // - Else if siblings remain -> move to the bottom-most sibling
+        // - Else -> move to parent, then group
         if (currentIndex > 0) return allSiblings[currentIndex - 1].id;
-        if (currentIndex < allSiblings.length - 1) return allSiblings[currentIndex + 1].id;
+        if (allSiblings.length > 1) return allSiblings[allSiblings.length - 1].id;
         if (task.parent_task_id) return task.parent_task_id;
         return task.group_id;
     }, [tasks, getTaskById]);
@@ -925,6 +929,9 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
         await onDeleteTask(taskId);
         setSelectedNodeId(nextFocusId);
         setSelectedNodeIds(nextFocusId ? new Set([nextFocusId]) : new Set());
+        if (nextFocusId) {
+            focusNodeWithPollingV2(nextFocusId, 300, false);
+        }
     }, [hasChildren, calculateNextFocus, onDeleteTask]);
 
     // Navigation helpers for arrow keys
@@ -1024,6 +1031,7 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
                 type: 'projectNode',
                 data: {
                     label: project?.title ?? 'Project',
+                    isSelected: selectedNodeIds.has('project-root'),
                     onSave: async (newTitle: string) => {
                         console.log('[MindMap] Project title update requested:', newTitle);
                         if (onUpdateProject && project?.id) {
@@ -1086,6 +1094,7 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
                     data: {
                         label: task.title ?? 'Task',
                         status: task.status ?? 'todo',
+                        isSelected: selectedNodeIds.has(task.id),
                         triggerEdit,
                         initialValue: '',
                         onSave: (t: string) => saveTaskTitle(task.id, t),
@@ -1122,6 +1131,7 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
                     type: 'groupNode',
                     data: {
                         label: group.title ?? 'Group',
+                        isSelected: selectedNodeIds.has(group.id),
                         onSave: (newTitle: string) => onUpdateGroupTitle?.(group.id, newTitle),
                         onDelete: () => onDeleteGroup?.(group.id),
                     },
