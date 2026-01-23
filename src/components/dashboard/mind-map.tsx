@@ -159,7 +159,6 @@ const ProjectNode = React.memo(({ data, selected }: NodeProps) => {
         if (selected && !isEditing && inputRef.current) {
             requestAnimationFrame(() => {
                 inputRef.current?.focus();
-                inputRef.current?.select();
             });
         }
     }, [selected, isEditing]);
@@ -642,7 +641,6 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
         e.stopPropagation();
         if (!isEditing) {
             inputRef.current?.focus();
-            inputRef.current?.select();
             setShowCaret(false);
         }
     }, [isEditing]);
