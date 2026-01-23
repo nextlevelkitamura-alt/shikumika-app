@@ -1,6 +1,10 @@
 "use client"
 
+<<<<<<< HEAD
 import React, { useMemo, useState, useEffect, useLayoutEffect, useCallback, useRef, Component, ErrorInfo, ReactNode } from 'react';
+=======
+import React, { useMemo, useState, useEffect, useCallback, useRef, Component, ErrorInfo, ReactNode } from 'react';
+>>>>>>> 2589f58 (fix: IME first-keystroke focus + add mindmap UX rules doc)
 import ReactFlow, {
     Node,
     Edge,
@@ -154,11 +158,20 @@ const ProjectNode = React.memo(({ data, selected }: NodeProps) => {
         });
     }, [selected, isEditing]);
 
+<<<<<<< HEAD
     // IMPORTANT (IME): focus synchronously when node becomes selected.
     // Avoid rAF focus that can race with the first composition key and cause "hあ".
     useLayoutEffect(() => {
         if (selected && !isEditing && inputRef.current) {
             inputRef.current.focus();
+=======
+    // Auto-focus input when selected (IME-friendly first keystroke)
+    useEffect(() => {
+        if (selected && !isEditing && inputRef.current) {
+            requestAnimationFrame(() => {
+                inputRef.current?.focus();
+            });
+>>>>>>> 2589f58 (fix: IME first-keystroke focus + add mindmap UX rules doc)
         }
     }, [selected, isEditing]);
 
@@ -526,8 +539,13 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
                 return;
             }
             if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+<<<<<<< HEAD
                 // IMPORTANT (IME): for character input, do not change state here.
                 // Let the input receive the key/composition; onChange/onCompositionStart will flip editing.
+=======
+                // IMPORTANT (IME): don't change state here.
+                // Let the input receive the key/composition naturally.
+>>>>>>> 2589f58 (fix: IME first-keystroke focus + add mindmap UX rules doc)
                 return;
             }
         }
