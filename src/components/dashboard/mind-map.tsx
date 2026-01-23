@@ -177,6 +177,13 @@ const ProjectNode = React.memo(({ data, selected }: NodeProps) => {
             // Selection Mode behaviors for Project (root) node:
             // - Typing starts editing immediately (IME-compatible because input is already focused)
             // - Delete/Backspace triggers delete confirmation (same as before)
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                if (data?.onAddChild) {
+                    await data.onAddChild();
+                }
+                return;
+            }
             if (e.key === 'Delete' || e.key === 'Backspace') {
                 e.preventDefault();
                 if (typeof window === 'undefined') return;
@@ -215,7 +222,12 @@ const ProjectNode = React.memo(({ data, selected }: NodeProps) => {
         if (isEditing) return;
         e.stopPropagation();
 
-        if (e.key === ' ' || e.key === 'F2') {
+        if (e.key === 'Tab') {
+            e.preventDefault();
+            if (data?.onAddChild) {
+                data.onAddChild();
+            }
+        } else if (e.key === ' ' || e.key === 'F2') {
             e.preventDefault();
             setIsEditing(true);
             setEditValue(data?.label ?? '');
@@ -728,6 +740,8 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
     // REF: Flag to indicate we're waiting for a new node
     const isCreatingNodeRef = useRef(false);
     const prevTaskCountRef = useRef(tasks.length);
+    const isCreatingGroupRef = useRef(false);
+    const prevGroupCountRef = useRef(groups.length);
 
     // REF: Focus queue - persists through dagre re-layouts
     const focusQueueRef = useRef<string | null>(null);
@@ -894,6 +908,31 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
         prevTaskCountRef.current = currentCount;
     }, [tasks, focusNodeWithPollingV2]);
 
+    // EFFECT: Detect new group creation and focus
+    useEffect(() => {
+        const currentCount = groups.length;
+        const prevCount = prevGroupCountRef.current;
+
+        if (isCreatingGroupRef.current && currentCount > prevCount) {
+            const newestGroup = groups.reduce((newest, group) => {
+                if (!newest) return group;
+                const newestDate = new Date(newest.created_at).getTime();
+                const groupDate = new Date(group.created_at).getTime();
+                return groupDate > newestDate ? group : newest;
+            }, null as TaskGroup | null);
+
+            if (newestGroup?.id) {
+                setSelectedNodeId(newestGroup.id);
+                setSelectedNodeIds(new Set([newestGroup.id]));
+                focusNodeWithPollingV2(newestGroup.id, 300, false);
+            }
+
+            isCreatingGroupRef.current = false;
+        }
+
+        prevGroupCountRef.current = currentCount;
+    }, [groups, focusNodeWithPollingV2]);
+
     // EFFECT: Backup focus trigger when pendingEditNodeId changes
     useEffect(() => {
         if (pendingEditNodeId && focusQueueRef.current === pendingEditNodeId) {
@@ -916,6 +955,11 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
     const getTaskById = useCallback((id: string) => tasks.find(t => t.id === id), [tasks]);
     const getGroupForTask = useCallback((task: Task) => groups.find(g => g.id === task.group_id), [groups]);
     const hasChildren = useCallback((taskId: string) => tasks.some(t => t.parent_task_id === taskId), [tasks]);
+    const createGroupAndFocus = useCallback(async (title: string) => {
+        if (!onCreateGroup) return;
+        isCreatingGroupRef.current = true;
+        await onCreateGroup(title);
+    }, [onCreateGroup]);
 
     const calculateNextFocus = useCallback((taskId: string): string | null => {
         const task = getTaskById(taskId);
@@ -1093,6 +1137,7 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
                 type: 'projectNode',
                 data: {
                     label: project?.title ?? 'Project',
+                    onAddChild: () => createGroupAndFocus("New Group"),
                     isSelected: selectedNodeIds.has('project-root'),
                     onSave: async (newTitle: string) => {
                         console.log('[MindMap] Project title update requested:', newTitle);
@@ -1303,11 +1348,9 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
         } else if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
             // Create new group when Enter is pressed on a group node
             event.preventDefault();
-            if (onCreateGroup) {
-                onCreateGroup("New Group");
-            }
+            await createGroupAndFocus("New Group");
         }
-    }, [selectedNodeId, selectedNodeIds, tasks, groups, hasChildren, onDeleteTask, onCreateTask, onCreateGroup]);
+    }, [selectedNodeId, selectedNodeIds, tasks, groups, hasChildren, onDeleteTask, onCreateTask, createGroupAndFocus]);
 
     return (
         <div className="w-full h-full bg-muted/5 relative outline-none" tabIndex={0} onKeyDown={handleContainerKeyDown}>
