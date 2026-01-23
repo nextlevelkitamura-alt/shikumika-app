@@ -767,6 +767,7 @@ interface MindMapProps {
 function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGroup, onDeleteGroup, onUpdateProject, onCreateTask, onUpdateTask, onDeleteTask }: MindMapProps) {
     const reactFlow = useReactFlow();
     const projectId = project?.id ?? '';
+    const USER_ACTION_WINDOW_MS = 800;
     const groupsJson = JSON.stringify(groups?.map(g => ({ id: g?.id, title: g?.title })) ?? []);
     const tasksJson = JSON.stringify(tasks?.map(t => ({
         id: t?.id,
@@ -786,6 +787,18 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
     const [collapsedGroupIds, setCollapsedGroupIds] = useState<Set<string>>(new Set());
     const [dropTargetNodeId, setDropTargetNodeId] = useState<string | null>(null);
     const [dragPositions, setDragPositions] = useState<Record<string, { x: number; y: number }>>({});
+    const lastUserActionAtRef = useRef<number>(0);
+    const markUserAction = useCallback(() => {
+        lastUserActionAtRef.current = Date.now();
+    }, []);
+
+    const applySelection = useCallback((ids: Set<string>, primaryId: string | null, source: 'user' | 'system') => {
+        if (source === 'user') {
+            markUserAction();
+        }
+        setSelectedNodeIds(ids);
+        setSelectedNodeId(primaryId);
+    }, [markUserAction]);
 
     // REF: Flag to indicate we're waiting for a new node
     const isCreatingNodeRef = useRef(false);
@@ -1461,18 +1474,21 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
     ]);
 
     const handleNodeClick: NodeMouseHandler = useCallback((_, node) => {
-        setSelectedNodeId(node.id);
-        setSelectedNodeIds(new Set([node.id]));
-    }, []);
+        applySelection(new Set([node.id]), node.id, 'user');
+    }, [applySelection]);
     const handlePaneClick = useCallback(() => {
-        setSelectedNodeId(null);
-        setSelectedNodeIds(new Set());
+        applySelection(new Set(), null, 'user');
         setDropTargetNodeId(null);
-    }, []);
+    }, [applySelection]);
 
     const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[] }) => {
         // IMPORTANT: Do NOT feed selection back into the `nodes` prop via `selected: ...`
         // ReactFlow should own selection UI state. We only track selected IDs for bulk actions.
+        const now = Date.now();
+        const recentUser = now - lastUserActionAtRef.current < USER_ACTION_WINDOW_MS;
+        if (!recentUser) {
+            return;
+        }
         const nextIds = new Set(params.nodes.map(n => n.id));
         setSelectedNodeIds((prev) => {
             if (prev.size === nextIds.size) {
@@ -1489,6 +1505,19 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
             setDropTargetNodeId(null);
         }
     }, []);
+
+    // Prevent DB refreshes from stealing focus
+    useLayoutEffect(() => {
+        if (!selectedNodeId) return;
+        const now = Date.now();
+        const recentUser = now - lastUserActionAtRef.current < USER_ACTION_WINDOW_MS;
+        if (recentUser) return;
+        if (typeof document !== 'undefined') {
+            const activeTag = document.activeElement?.tagName;
+            if (activeTag === 'INPUT') return;
+        }
+        focusNodeWithPollingV2(selectedNodeId, 200, false);
+    }, [groupsJson, tasksJson, selectedNodeId, focusNodeWithPollingV2]);
 
     const handlePaneWheel = useCallback((event: React.WheelEvent) => {
         if (!event.ctrlKey && !event.metaKey) return;
@@ -1555,6 +1584,7 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
     }, [onUpdateTask, getTaskById, isDescendant, getDropTargetNode]);
 
     const handleContainerKeyDown = useCallback(async (event: React.KeyboardEvent) => {
+        markUserAction();
         // Bulk delete: drag-selection -> Delete/Backspace removes selected tasks
         if ((event.key === 'Delete' || event.key === 'Backspace') && selectedNodeIds.size > 0) {
             const taskById = new Map(tasks.map(t => [t.id, t]));
@@ -1615,10 +1645,15 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
             event.preventDefault();
             await createGroupAndFocus("New Group");
         }
-    }, [selectedNodeId, selectedNodeIds, tasks, groups, hasChildren, onDeleteTask, onCreateTask, createGroupAndFocus]);
+    }, [selectedNodeId, selectedNodeIds, tasks, groups, hasChildren, onDeleteTask, onCreateTask, createGroupAndFocus, markUserAction]);
 
     return (
-        <div className="w-full h-full bg-muted/5 relative outline-none" tabIndex={0} onKeyDown={handleContainerKeyDown}>
+        <div
+            className="w-full h-full bg-muted/5 relative outline-none"
+            tabIndex={0}
+            onKeyDown={handleContainerKeyDown}
+            onMouseDown={markUserAction}
+        >
             <ReactFlow
                 nodes={nodes}
                 edges={edges}
