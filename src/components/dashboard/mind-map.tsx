@@ -527,13 +527,9 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
                 }
                 return;
             }
-            if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-                // IMPORTANT (IME): don't inject the first character into state.
-                // Let the input receive the key/composition naturally.
-                setIsEditing(true);
-                setShowCaret(false);
-                return;
-            }
+            // IMPORTANT (IME): for character input, do not change state here.
+            // Let the input receive the key/composition; onChange/onCompositionStart will flip editing.
+            return;
         }
 
         if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
@@ -1036,7 +1032,9 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
         setSelectedNodeId(nextFocusId);
         setSelectedNodeIds(nextFocusId ? new Set([nextFocusId]) : new Set());
         if (nextFocusId) {
-            focusNodeWithPollingV2(nextFocusId, 300, false);
+            requestAnimationFrame(() => {
+                focusNodeWithPollingV2(nextFocusId, 300, false);
+            });
         }
     }, [hasChildren, calculateNextFocus, onDeleteTask]);
 
