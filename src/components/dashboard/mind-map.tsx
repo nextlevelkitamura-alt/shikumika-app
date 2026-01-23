@@ -13,6 +13,7 @@ import ReactFlow, {
     ReactFlowProvider,
     NodeMouseHandler,
     SelectionMode,
+    useReactFlow,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import dagre from 'dagre';
@@ -188,6 +189,9 @@ const ProjectNode = React.memo(({ data, selected }: NodeProps) => {
             if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
                 // Do NOT preventDefault: allow the key/composition to flow into the already-focused input
                 setIsEditing(true);
+                if (inputRef.current) {
+                    inputRef.current.setSelectionRange(0, inputRef.current.value.length);
+                }
                 return;
             }
         }
@@ -201,7 +205,7 @@ const ProjectNode = React.memo(({ data, selected }: NodeProps) => {
             setEditValue(data?.label ?? '');
             setIsEditing(false);
         }
-    }, [saveValue, data?.label]);
+    }, [saveValue, data?.label, isEditing]);
 
     const handleWrapperKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
         if (isEditing) return;
@@ -229,6 +233,12 @@ const ProjectNode = React.memo(({ data, selected }: NodeProps) => {
         } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
             // Start editing on typing (fallback in case wrapper has focus)
             setIsEditing(true);
+            requestAnimationFrame(() => {
+                if (inputRef.current) {
+                    inputRef.current.focus();
+                    inputRef.current.setSelectionRange(0, inputRef.current.value.length);
+                }
+            });
         }
     }, [isEditing, data]);
 
@@ -236,6 +246,10 @@ const ProjectNode = React.memo(({ data, selected }: NodeProps) => {
         e.stopPropagation();
         setIsEditing(true);
         setEditValue(data?.label ?? '');
+        requestAnimationFrame(() => {
+            const len = inputRef.current?.value.length ?? 0;
+            inputRef.current?.setSelectionRange(0, len);
+        });
     }, [data?.label]);
 
     const handleInputBlur = useCallback(async () => {
@@ -290,6 +304,7 @@ const GroupNode = React.memo(({ data, selected }: NodeProps) => {
     const wrapperRef = useRef<HTMLDivElement>(null);
     const [isEditing, setIsEditing] = useState(false);
     const [editValue, setEditValue] = useState(data?.label ?? '');
+    const [showCaret, setShowCaret] = useState(false);
 
     // Sync label
     useEffect(() => {
@@ -302,14 +317,18 @@ const GroupNode = React.memo(({ data, selected }: NodeProps) => {
     useEffect(() => {
         if (isEditing && inputRef.current) {
             inputRef.current.focus();
-            inputRef.current.select();
+            const len = inputRef.current.value.length;
+            inputRef.current.setSelectionRange(len, len);
         }
     }, [isEditing]);
 
-    // Focus wrapper when selected and not editing
-    useEffect(() => {
-        if (selected && !isEditing && wrapperRef.current) {
-            wrapperRef.current.focus();
+    // Keep input focused when selected so IME can start from first key
+    useLayoutEffect(() => {
+        if (selected && inputRef.current) {
+            inputRef.current.focus();
+            if (!isEditing) {
+                setShowCaret(false);
+            }
         }
     }, [selected, isEditing]);
 
@@ -322,14 +341,25 @@ const GroupNode = React.memo(({ data, selected }: NodeProps) => {
 
     const handleInputKeyDown = useCallback(async (e: React.KeyboardEvent<HTMLInputElement>) => {
         e.stopPropagation();
+        if (!isEditing && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+            setIsEditing(true);
+            setShowCaret(true);
+            if (inputRef.current) {
+                inputRef.current.setSelectionRange(0, inputRef.current.value.length);
+            }
+            return;
+        }
+
         if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
             e.preventDefault();
             await saveValue();
             setIsEditing(false);
+            setShowCaret(false);
         } else if (e.key === 'Escape') {
             e.preventDefault();
             setEditValue(data?.label ?? '');
             setIsEditing(false);
+            setShowCaret(false);
         }
     }, [saveValue, data?.label]);
 
@@ -348,6 +378,10 @@ const GroupNode = React.memo(({ data, selected }: NodeProps) => {
             // IMPORTANT (IME): don't inject the first character into state (causes "kあ").
             // The input is already focused while selected, so IME can start composition normally.
             setIsEditing(true);
+            setShowCaret(true);
+            if (inputRef.current) {
+                inputRef.current.setSelectionRange(0, inputRef.current.value.length);
+            }
         }
     }, [isEditing, data]);
 
@@ -355,6 +389,11 @@ const GroupNode = React.memo(({ data, selected }: NodeProps) => {
         e.stopPropagation();
         setIsEditing(true);
         setEditValue(data?.label ?? '');
+        setShowCaret(true);
+        requestAnimationFrame(() => {
+            const len = inputRef.current?.value.length ?? 0;
+            inputRef.current?.setSelectionRange(0, len);
+        });
     }, [data?.label]);
 
     const handleInputBlur = useCallback(async () => {
@@ -374,28 +413,54 @@ const GroupNode = React.memo(({ data, selected }: NodeProps) => {
             ref={wrapperRef}
             className={cn(
                 "w-[150px] px-3 py-2 rounded-lg bg-card border text-sm font-medium text-center shadow transition-all outline-none",
-                selected && "ring-2 ring-white ring-offset-2 ring-offset-background"
+                selected && "ring-2 ring-white ring-offset-2 ring-offset-background",
+                data?.isDropTarget && "ring-2 ring-sky-400 ring-offset-2 ring-offset-background"
             )}
             tabIndex={0}
             onKeyDown={handleWrapperKeyDown}
             onDoubleClick={handleDoubleClick}
         >
-            <Handle type="target" position={Position.Left} className="!bg-muted-foreground" />
-            {isEditing ? (
-                <input
-                    ref={inputRef}
-                    type="text"
-                    value={editValue}
-                    onChange={(e) => setEditValue(e.target.value)}
-                    onBlur={handleInputBlur}
-                    onKeyDown={handleInputKeyDown}
-                    onClick={(e) => e.stopPropagation()}
-                    className="nodrag nopan w-full bg-transparent border-none text-sm text-center focus:outline-none focus:ring-0"
-                    autoFocus
-                />
-            ) : (
-                <span className="truncate">{data?.label ?? 'Group'}</span>
+            {data?.onToggleCollapse && data?.hasChildren && (
+                <button
+                    type="button"
+                    className="nodrag nopan mr-1 text-[10px] text-muted-foreground hover:text-foreground"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        data.onToggleCollapse?.();
+                    }}
+                    aria-label={data?.collapsed ? 'Expand' : 'Collapse'}
+                >
+                    {data?.collapsed ? '>' : 'v'}
+                </button>
             )}
+            <Handle type="target" position={Position.Left} className="!bg-muted-foreground" />
+            <input
+                ref={inputRef}
+                type="text"
+                value={editValue}
+                onChange={(e) => {
+                    if (!isEditing) {
+                        setIsEditing(true);
+                        setShowCaret(true);
+                    }
+                    setEditValue(e.target.value);
+                }}
+                onBlur={handleInputBlur}
+                onKeyDown={handleInputKeyDown}
+                onClick={(e) => {
+                    if (isEditing) e.stopPropagation();
+                }}
+                onCompositionStart={() => {
+                    if (!isEditing) {
+                        setIsEditing(true);
+                        setShowCaret(true);
+                    }
+                }}
+                className={cn(
+                    "nodrag nopan w-full bg-transparent border-none text-sm text-center focus:outline-none focus:ring-0",
+                    !showCaret && "caret-transparent pointer-events-none select-none"
+                )}
+            />
             <Handle type="source" position={Position.Right} className="!bg-muted-foreground" />
         </div>
     );
@@ -499,6 +564,9 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
                 // Selection Mode -> Edit Mode: allow IME to start from first key
                 setIsEditing(true);
                 setShowCaret(true);
+                if (inputRef.current) {
+                    inputRef.current.setSelectionRange(0, inputRef.current.value.length);
+                }
                 return;
             }
         }
@@ -573,6 +641,9 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
             inputRef.current?.focus();
             setIsEditing(true);
             setShowCaret(true);
+            if (inputRef.current) {
+                inputRef.current.setSelectionRange(0, inputRef.current.value.length);
+            }
         }
     }, [isEditing, data]);
 
@@ -583,7 +654,7 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
         setEditValue(data?.label ?? '');
         requestAnimationFrame(() => {
             const len = inputRef.current?.value.length ?? 0;
-            inputRef.current?.setSelectionRange(len, len);
+            inputRef.current?.setSelectionRange(0, len);
         });
     }, [data?.label]);
 
@@ -620,13 +691,27 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
             ref={wrapperRef}
             className={cn(
                 "w-[140px] px-2 py-1.5 rounded bg-background border text-xs shadow-sm flex items-center gap-1 transition-all outline-none",
-                (selected || data?.isSelected) && "ring-2 ring-sky-400 ring-offset-1 ring-offset-background border-sky-400 shadow-[0_0_0_2px_rgba(56,189,248,0.20)]"
+                (selected || data?.isSelected) && "ring-2 ring-sky-400 ring-offset-1 ring-offset-background border-sky-400 shadow-[0_0_0_2px_rgba(56,189,248,0.20)]",
+                data?.isDropTarget && "ring-2 ring-emerald-400 ring-offset-1 ring-offset-background border-emerald-400"
             )}
             tabIndex={0}
             onKeyDown={handleWrapperKeyDown}
             onDoubleClick={handleDoubleClick}
             onMouseDown={handleWrapperMouseDown}
         >
+            {data?.onToggleCollapse && data?.hasChildren && (
+                <button
+                    type="button"
+                    className="nodrag nopan w-3 h-3 text-[10px] leading-none text-muted-foreground hover:text-foreground"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        data.onToggleCollapse?.();
+                    }}
+                    aria-label={data?.collapsed ? 'Expand' : 'Collapse'}
+                >
+                    {data?.collapsed ? '>' : 'v'}
+                </button>
+            )}
             <Handle type="target" position={Position.Left} className="!bg-muted-foreground/50 !w-1 !h-1" />
             <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", data?.status === 'done' ? "bg-primary" : "bg-muted-foreground/30")} />
 
@@ -680,6 +765,7 @@ interface MindMapProps {
 }
 
 function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGroup, onDeleteGroup, onUpdateProject, onCreateTask, onUpdateTask, onDeleteTask }: MindMapProps) {
+    const reactFlow = useReactFlow();
     const projectId = project?.id ?? '';
     const groupsJson = JSON.stringify(groups?.map(g => ({ id: g?.id, title: g?.title })) ?? []);
     const tasksJson = JSON.stringify(tasks?.map(t => ({
@@ -696,6 +782,10 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
     const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
     const [selectedNodeIds, setSelectedNodeIds] = useState<Set<string>>(new Set());
     const [pendingEditNodeId, setPendingEditNodeId] = useState<string | null>(null);
+    const [collapsedTaskIds, setCollapsedTaskIds] = useState<Set<string>>(new Set());
+    const [collapsedGroupIds, setCollapsedGroupIds] = useState<Set<string>>(new Set());
+    const [dropTargetNodeId, setDropTargetNodeId] = useState<string | null>(null);
+    const [dragPositions, setDragPositions] = useState<Record<string, { x: number; y: number }>>({});
 
     // REF: Flag to indicate we're waiting for a new node
     const isCreatingNodeRef = useRef(false);
@@ -915,6 +1005,84 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
     const getTaskById = useCallback((id: string) => tasks.find(t => t.id === id), [tasks]);
     const getGroupForTask = useCallback((task: Task) => groups.find(g => g.id === task.group_id), [groups]);
     const hasChildren = useCallback((taskId: string) => tasks.some(t => t.parent_task_id === taskId), [tasks]);
+    const hasGroupChildren = useCallback((groupId: string) => tasks.some(t => t.group_id === groupId), [tasks]);
+    const isDescendant = useCallback((ancestorId: string, childId: string): boolean => {
+        const taskById = new Map(tasks.map(t => [t.id, t]));
+        let current = taskById.get(childId);
+        const visited = new Set<string>();
+        while (current?.parent_task_id) {
+            if (current.parent_task_id === ancestorId) return true;
+            if (visited.has(current.parent_task_id)) break;
+            visited.add(current.parent_task_id);
+            current = taskById.get(current.parent_task_id);
+        }
+        return false;
+    }, [tasks]);
+
+    const toggleTaskCollapse = useCallback((taskId: string) => {
+        setCollapsedTaskIds(prev => {
+            const next = new Set(prev);
+            if (next.has(taskId)) {
+                next.delete(taskId);
+            } else {
+                next.add(taskId);
+            }
+            return next;
+        });
+    }, []);
+
+    const toggleGroupCollapse = useCallback((groupId: string) => {
+        setCollapsedGroupIds(prev => {
+            const next = new Set(prev);
+            if (next.has(groupId)) {
+                next.delete(groupId);
+            } else {
+                next.add(groupId);
+            }
+            return next;
+        });
+    }, []);
+
+    const getDropTargetNode = useCallback((dragged: Node) => {
+        const getNodeRect = (n: Node) => {
+            const position = n.positionAbsolute ?? n.position;
+            const width = n.width ?? (n.type === 'projectNode' ? PROJECT_NODE_WIDTH : n.type === 'groupNode' ? GROUP_NODE_WIDTH : NODE_WIDTH);
+            const height = n.height ?? (n.type === 'projectNode' ? PROJECT_NODE_HEIGHT : n.type === 'groupNode' ? GROUP_NODE_HEIGHT : NODE_HEIGHT);
+            return {
+                left: position.x,
+                top: position.y,
+                right: position.x + width,
+                bottom: position.y + height,
+                centerX: position.x + width / 2,
+                centerY: position.y + height / 2,
+            };
+        };
+
+        const draggedRect = getNodeRect(dragged);
+        const candidates = reactFlow
+            .getNodes()
+            .filter(n => n.id !== dragged.id && (n.type === 'taskNode' || n.type === 'groupNode'));
+
+        let best: { node: Node; dist: number } | null = null;
+        for (const candidate of candidates) {
+            const rect = getNodeRect(candidate);
+            const inside =
+                draggedRect.centerX >= rect.left &&
+                draggedRect.centerX <= rect.right &&
+                draggedRect.centerY >= rect.top &&
+                draggedRect.centerY <= rect.bottom;
+            if (!inside) continue;
+
+            const dx = rect.centerX - draggedRect.centerX;
+            const dy = rect.centerY - draggedRect.centerY;
+            const dist = Math.hypot(dx, dy);
+            if (!best || dist < best.dist) {
+                best = { node: candidate, dist };
+            }
+        }
+
+        return best?.node ?? null;
+    }, [reactFlow]);
     const createGroupAndFocus = useCallback(async (title: string) => {
         if (!onCreateGroup) return;
         isCreatingGroupRef.current = true;
@@ -948,6 +1116,14 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
         const group = getGroupForTask(parentTask);
         if (!group) return;
 
+        // Auto-expand parent when adding a child
+        setCollapsedTaskIds(prev => {
+            if (!prev.has(parentTaskId)) return prev;
+            const next = new Set(prev);
+            next.delete(parentTaskId);
+            return next;
+        });
+
         // Set flag (mostly for logs now)
         isCreatingNodeRef.current = true;
 
@@ -967,6 +1143,16 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
         if (!task || !onCreateTask) return;
         const group = getGroupForTask(task);
         if (!group) return;
+
+        // Auto-expand parent when adding a sibling under a collapsed parent
+        if (task.parent_task_id) {
+            setCollapsedTaskIds(prev => {
+                if (!prev.has(task.parent_task_id!)) return prev;
+                const next = new Set(prev);
+                next.delete(task.parent_task_id!);
+                return next;
+            });
+        }
 
         // Set flag (mostly for logs now)
         isCreatingNodeRef.current = true;
@@ -1114,6 +1300,7 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
                     }
                 },
                 position: { x: 50, y: 200 },
+                draggable: false,
             });
 
             const safeGroups = parsedGroups.filter(g => g?.id);
@@ -1171,8 +1358,13 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
                         onAddSibling: () => addSiblingTask(task.id),
                         onDelete: () => deleteTask(task.id),
                         onNavigate: (direction: 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight') => handleNavigate(task.id, direction),
+                        hasChildren: hasChildren(task.id),
+                        collapsed: collapsedTaskIds.has(task.id),
+                        onToggleCollapse: () => toggleTaskCollapse(task.id),
+                        isDropTarget: dropTargetNodeId === task.id,
                     },
                     position: { x: xPos, y: yOffsetRef.current },
+                    draggable: true,
                 });
                 resultEdges.push({
                     id: `e-${parentId}-${task.id}`,
@@ -1183,10 +1375,12 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
 
                 yOffsetRef.current += 40;
 
-                // Render children recursively
-                const children = childTasksByParent[task.id] ?? [];
-                for (const child of children) {
-                    renderTasksRecursively(child, task.id, depth + 1, yOffsetRef);
+                // Render children recursively (skip if collapsed)
+                if (!collapsedTaskIds.has(task.id)) {
+                    const children = childTasksByParent[task.id] ?? [];
+                    for (const child of children) {
+                        renderTasksRecursively(child, task.id, depth + 1, yOffsetRef);
+                    }
                 }
             };
 
@@ -1203,10 +1397,20 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
                         isSelected: selectedNodeIds.has(group.id),
                         onSave: (newTitle: string) => onUpdateGroupTitle?.(group.id, newTitle),
                         onDelete: () => onDeleteGroup?.(group.id),
+                        hasChildren: hasGroupChildren(group.id),
+                        collapsed: collapsedGroupIds.has(group.id),
+                        onToggleCollapse: () => toggleGroupCollapse(group.id),
+                        isDropTarget: dropTargetNodeId === group.id,
                     },
                     position: { x: 300, y: groupY },
+                    draggable: false,
                 });
                 resultEdges.push({ id: `e-proj-${group.id}`, source: 'project-root', target: group.id, type: 'smoothstep' });
+
+                if (collapsedGroupIds.has(group.id)) {
+                    globalYOffset = Math.max(globalYOffset + 80, groupY + 30);
+                    return;
+                }
 
                 const groupRootTasks = rootTasksByGroup[group.id] ?? [];
                 const yOffsetRef = { current: groupY - 20 };
@@ -1222,8 +1426,39 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
         }
 
         // Apply dagre layout to get optimal positions
-        return getLayoutedElements(resultNodes, resultEdges);
-    }, [projectId, groupsJson, tasksJson, project?.title, shouldTriggerEdit, saveTaskTitle, addChildTask, addSiblingTask, deleteTask, onUpdateGroupTitle, onDeleteGroup]);
+        const layouted = getLayoutedElements(resultNodes, resultEdges);
+        if (Object.keys(dragPositions).length === 0) {
+            return layouted;
+        }
+
+        return {
+            nodes: layouted.nodes.map((node) =>
+                dragPositions[node.id] ? { ...node, position: dragPositions[node.id] } : node
+            ),
+            edges: layouted.edges,
+        };
+    }, [
+        projectId,
+        groupsJson,
+        tasksJson,
+        project?.title,
+        shouldTriggerEdit,
+        saveTaskTitle,
+        addChildTask,
+        addSiblingTask,
+        deleteTask,
+        onUpdateGroupTitle,
+        onDeleteGroup,
+        hasChildren,
+        hasGroupChildren,
+        collapsedTaskIds,
+        collapsedGroupIds,
+        toggleTaskCollapse,
+        toggleGroupCollapse,
+        handleNavigate,
+        dropTargetNodeId,
+        dragPositions,
+    ]);
 
     const handleNodeClick: NodeMouseHandler = useCallback((_, node) => {
         setSelectedNodeId(node.id);
@@ -1232,6 +1467,7 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
     const handlePaneClick = useCallback(() => {
         setSelectedNodeId(null);
         setSelectedNodeIds(new Set());
+        setDropTargetNodeId(null);
     }, []);
 
     const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[] }) => {
@@ -1249,7 +1485,74 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
             return nextIds;
         });
         setSelectedNodeId(params.nodes[0]?.id ?? null);
+        if (params.nodes.length === 0) {
+            setDropTargetNodeId(null);
+        }
     }, []);
+
+    const handlePaneWheel = useCallback((event: React.WheelEvent) => {
+        if (!event.ctrlKey && !event.metaKey) return;
+        event.preventDefault();
+        const current = reactFlow.getZoom();
+        const delta = event.deltaY > 0 ? -0.08 : 0.08;
+        const next = Math.min(1.5, Math.max(0.5, current + delta));
+        reactFlow.zoomTo(next);
+    }, [reactFlow]);
+
+    const handleNodeDrag = useCallback((_: React.MouseEvent, node: Node) => {
+        if (node.type !== 'taskNode') return;
+        const target = getDropTargetNode(node);
+        setDropTargetNodeId(target?.id ?? null);
+        setDragPositions(prev => ({ ...prev, [node.id]: node.position }));
+    }, [getDropTargetNode]);
+
+    const handleNodeDragStop = useCallback((_: React.MouseEvent, node: Node) => {
+        if (node.type !== 'taskNode') return;
+        if (!onUpdateTask) return;
+
+        const draggedTask = getTaskById(node.id);
+        if (!draggedTask) return;
+
+        const target = getDropTargetNode(node);
+        setDropTargetNodeId(null);
+        setDragPositions(prev => {
+            if (!prev[node.id]) return prev;
+            const next = { ...prev };
+            delete next[node.id];
+            return next;
+        });
+        if (!target) return;
+
+        if (target.type === 'taskNode') {
+            if (isDescendant(node.id, target.id)) return;
+            const targetTask = getTaskById(target.id);
+            if (!targetTask) return;
+
+            const newParentId = targetTask.id;
+            const newGroupId = targetTask.group_id;
+
+            if (newParentId === draggedTask.parent_task_id && newGroupId === draggedTask.group_id) return;
+
+            setCollapsedTaskIds(prev => {
+                if (!prev.has(newParentId)) return prev;
+                const next = new Set(prev);
+                next.delete(newParentId);
+                return next;
+            });
+
+            onUpdateTask(draggedTask.id, { parent_task_id: newParentId, group_id: newGroupId });
+            return;
+        }
+
+        if (target.type === 'groupNode') {
+            const newParentId = null;
+            const newGroupId = target.id;
+
+            if (newParentId === draggedTask.parent_task_id && newGroupId === draggedTask.group_id) return;
+
+            onUpdateTask(draggedTask.id, { parent_task_id: newParentId, group_id: newGroupId });
+        }
+    }, [onUpdateTask, getTaskById, isDescendant, getDropTargetNode]);
 
     const handleContainerKeyDown = useCallback(async (event: React.KeyboardEvent) => {
         // Bulk delete: drag-selection -> Delete/Backspace removes selected tasks
@@ -1322,18 +1625,21 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
                 nodeTypes={nodeTypes}
                 defaultViewport={defaultViewport}
                 onNodeClick={handleNodeClick}
+                onNodeDrag={handleNodeDrag}
+                onNodeDragStop={handleNodeDragStop}
                 onPaneClick={handlePaneClick}
                 onSelectionChange={handleSelectionChange}
+                onWheel={handlePaneWheel}
                 fitView
                 fitViewOptions={{ padding: 0.2 }}
                 deleteKeyCode={null}
                 nodesConnectable={false}
-                nodesDraggable={false}
+                nodesDraggable={true}
                 selectionOnDrag={true}
                 selectionMode={SelectionMode.Partial}
                 panOnDrag={[1, 2]}
                 panOnScroll={true}
-                zoomOnScroll={true}
+                zoomOnScroll={false}
                 minZoom={0.5}
                 maxZoom={1.5}
             >

@@ -1,48 +1,69 @@
 # MindMap UX Rules (Single Source of Truth)
 
 This document defines the ONLY valid UX rules for the MindMap (ReactFlow) interactions.
-All future changes MUST conform to these rules to ensure "Native App-like" performance.
+All future changes MUST conform to these rules to ensure a "Professional Native App-like" experience.
 
-## 1. Text Input Rules (Zero Latency & IME-Safe)
-- **Typing Trigger**:
-  - Typing any character key while in Selection Mode MUST immediately switch to Edit Mode and capture that character (fixing the "h-a" missing char issue).
-  - Do NOT require a double-click to start typing.
-- **IME Handling**:
-  - The first keystroke that triggers Edit Mode must be passed to the input so IME composition starts correctly from the first character.
-  - Never block native key events during composition.
-- **Confirming Input**:
-  - `Enter` confirms input (including IME commit) and returns to **Selection Mode** (Blue Border).
-  - Save operations must be Optimistic (update UI immediately, save to DB in background).
+## 1. Core Philosophy: "Fluidity & Optimism"
+* **Optimistic UI (Absolute Rule)**:
+  - All actions (Create, Edit, Move, Delete, Fold) MUST update the local UI **instantly (0ms latency)**.
+  - Database synchronization happens asynchronously in the background. Never block the UI.
+* **Natural Navigation**:
+  - The canvas must feel like an infinite sheet of paper, responsive to fluid gestures.
 
-## 2. Focus Management (The "Flow")
-- **Create Sibling/Child**:
-  - Upon creation, focus MUST move to the new node and **IMMEDIATELY enter Edit Mode** (caret blinking).
-  - User should not need to press Enter again to start typing.
-- **Delete**:
-  - After deleting a node, focus automatically moves to an adjacent node to allow continuous deletion:
-    - Priority: Upper Sibling > Lower Sibling > Parent.
-  - Focus recovery must be instant (use `requestAnimationFrame` if DOM needs to settle).
+## 2. Navigation & View Control (New!)
+* **Trackpad Panning**:
+  - **Two-finger drag** on the trackpad MUST pan the canvas smoothly (like Google Maps or Figma).
+  - Do not require holding Space or clicking scrollbars.
+* **Zooming**:
+  - Pinch-to-zoom support.
+  - `Cmd` + Scroll (or `Ctrl` + Scroll) for zooming via mouse wheel.
 
-## 3. Keyboard Shortcuts
-- **Selection Mode (Blue Border)**:
-  - `Enter` → Create Sibling (Vertical) -> **Auto Edit**.
-  - `Tab` → Create Child (Horizontal) -> **Auto Edit**.
-  - `Arrow keys` → Navigate tree.
-  - `Delete/Backspace` → Delete node -> Focus adjacent.
-  - `Any Character Key` → Switch to Edit Mode -> Input character.
-- **Edit Mode (Typing)**:
-  - `Enter` → Confirm input -> Return to **Selection Mode**.
-  - `Tab` → Confirm input -> Create Child -> **Auto Edit**.
-  - `Escape` → Cancel edit -> Return to Selection Mode.
-- **IME Composition**:
-  - `Enter` determines the converted text (does NOT exit Edit Mode).
+## 3. Node Manipulation (New!)
+* **Marquee Selection (Drag to Select)**:
+  - Clicking and dragging on the empty canvas MUST draw a selection box (Blue rectangle).
+  - All nodes touching the box become **Selected**.
+  - **Bulk Actions**: Once multiple nodes are selected:
+    - `Delete` key deletes ALL selected nodes instantly.
+    - Dragging one node moves ALL selected nodes (if visual grouping is supported).
+* **Drag & Drop Reordering**:
+  - Users can drag a node and drop it onto another node to **Reparent** (attach as child).
+  - Visual feedback (highlighting target node) is required during drag.
+  - Update layout instantly upon drop.
+* **Folding/Unfolding (Collapsible)**:
+  - Every parent node must have a visible **"Expand/Collapse" button** (handle) near the connection line.
+  - Clicking it toggles the visibility of all descendant nodes.
+  - Default state: Expanded.
 
-## 4. Selection / Visual State
-- **Selection Mode**: Shows a clear blue border (ring).
-- **Edit Mode**: Shows the text input caret.
-- Selection must persist correctly after drag/drop or layout updates.
+## 4. Text Input Rules (Excel-Like Overwrite)
+* **Typing Trigger**:
+  - In Selection Mode, typing any character key MUST:
+    1. Switch to Edit Mode immediately.
+    2. **Overwrite** the entire existing text with the typed character.
+    3. Start IME composition correctly (Fixing "h-a" issue).
+* **Edit Trigger**:
+  - `Double Click` or `F2` enters Edit Mode with **All Text Selected**.
 
-## 5. Non-Negotiable Constraints
-- Do not remove Dagre layout logic.
-- Do not break Marquee multi-select or bulk delete.
-- **Performance**: No artificial delays (e.g., waiting for DB) in UI interactions.
+## 5. Focus Management (The "Flow")
+* **Creation Flow**:
+  - `Enter` (Sibling) / `Tab` (Child) -> **Instant Focus** on new node (Edit Mode).
+  - Do NOT wait for DB response.
+* **Deletion Flow**:
+  - Focus moves to adjacent neighbor immediately.
+
+## 6. Technical Constraints
+* **ReactFlow Config**:
+  - Enable `panOnScroll={true}` for trackpad support.
+  - Enable `selectionOnDrag={true}` for marquee selection.
+  - Enable `nodesDraggable={true}` (but ensure text selection inside node doesn't trigger drag).
+* **Performance**:
+  - Use `useOptimistic` or local state for Drag&Drop and Folding to ensure 60fps animations.
+
+## 7. Keyboard Shortcuts Summary
+| Trigger | Action | UI Response |
+| :--- | :--- | :--- |
+| **Selection** | `Char Key` | Overwrite & Edit | **Instant** |
+| | `Enter` | Create Sibling | **Instant** |
+| | `Tab` | Create Child | **Instant** |
+| | `Drag Canvas` | Marquee Select | **Fluid** |
+| | `Delete` | Bulk Delete | **Instant** |
+| **Drag Node** | Drop on Node | Reparent (Move) | **Instant Layout** |
