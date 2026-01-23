@@ -346,7 +346,6 @@ const GroupNode = React.memo(({ data, selected }: NodeProps) => {
         } else if (e.key === 'F2') {
             e.preventDefault();
             setIsEditing(true);
-            setShowCaret(true);
             setEditValue(data?.label ?? '');
         } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
             // IMPORTANT (IME): don't inject the first character into state (causes "kあ").
