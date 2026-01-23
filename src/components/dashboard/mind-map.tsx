@@ -527,9 +527,11 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
                 }
                 return;
             }
-            // IMPORTANT (IME): for character input, do not change state here.
-            // Let the input receive the key/composition; onChange/onCompositionStart will flip editing.
-            return;
+            if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                // IMPORTANT (IME): for character input, do not change state here.
+                // Let the input receive the key/composition; onChange/onCompositionStart will flip editing.
+                return;
+            }
         }
 
         if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
@@ -600,9 +602,8 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
         } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
             // IMPORTANT (IME): don't inject the first character into state (causes "kあ").
             // Focus input and allow native composition.
-            setIsEditing(true);
-            setShowCaret(false);
             inputRef.current?.focus();
+            setShowCaret(false);
         }
     }, [isEditing, data]);
 
