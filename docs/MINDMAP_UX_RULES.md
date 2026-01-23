@@ -1,50 +1,48 @@
 # MindMap UX Rules (Single Source of Truth)
 
 This document defines the ONLY valid UX rules for the MindMap (ReactFlow) interactions.
-All future changes MUST conform to these rules.
+All future changes MUST conform to these rules to ensure "Native App-like" performance.
 
-## 1. Text Input Rules (IME-Safe)
-- **Selection Mode**: clicking a task focuses the input but does not blink the caret.
-- **Edit Mode**: caret blinks only when explicitly entering edit mode (e.g. double-click).
-- **IME first keystroke**:
-  - Never inject the first character via `setEditValue(e.key)` on keydown.
-  - Let the focused input receive the native key/composition events.
-  - `onChange` / `onCompositionStart` may toggle editing, but must not break IME composition.
-- **Confirming input**:
-  - Enter confirms (including IME conversion) and returns to Selection Mode.
-  - Save is optimistic in UI; DB save is delayed in the background (no UI blocking).
+## 1. Text Input Rules (Zero Latency & IME-Safe)
+- **Typing Trigger**:
+  - Typing any character key while in Selection Mode MUST immediately switch to Edit Mode and capture that character (fixing the "h-a" missing char issue).
+  - Do NOT require a double-click to start typing.
+- **IME Handling**:
+  - The first keystroke that triggers Edit Mode must be passed to the input so IME composition starts correctly from the first character.
+  - Never block native key events during composition.
+- **Confirming Input**:
+  - `Enter` confirms input (including IME commit) and returns to **Selection Mode** (Blue Border).
+  - Save operations must be Optimistic (update UI immediately, save to DB in background).
 
-## 2. Focus Management
+## 2. Focus Management (The "Flow")
 - **Create Sibling/Child**:
-  - After creation, focus moves to the new node using `focusNodeWithPollingV2(..., preferInput=false)`.
-  - New nodes start in Selection Mode (caret not blinking).
+  - Upon creation, focus MUST move to the new node and **IMMEDIATELY enter Edit Mode** (caret blinking).
+  - User should not need to press Enter again to start typing.
 - **Delete**:
-  - After delete, focus moves to an adjacent node to allow continuous deletion:
-    - If an upper sibling exists → focus upper sibling.
-    - Else if siblings remain → focus the bottom-most sibling.
-    - Else → focus parent, then group as fallback.
-  - Use a `requestAnimationFrame` wrapper to ensure DOM is ready.
+  - After deleting a node, focus automatically moves to an adjacent node to allow continuous deletion:
+    - Priority: Upper Sibling > Lower Sibling > Parent.
+  - Focus recovery must be instant (use `requestAnimationFrame` if DOM needs to settle).
 
 ## 3. Keyboard Shortcuts
-- **Selection Mode**:
-  - Enter → create sibling (vertical).
-  - Tab → create child (horizontal).
-  - Arrow keys → tree navigation via `onNavigate`.
-  - Delete/Backspace → delete selected node.
-- **Edit Mode**:
-  - Enter → confirm input and return to Selection Mode.
-  - Tab → confirm input and create child; focus new node (Selection Mode).
-  - Escape → cancel edit, revert label, return to Selection Mode.
-- **IME composition**:
-  - Never execute Enter/Tab actions while `isComposing` is true.
+- **Selection Mode (Blue Border)**:
+  - `Enter` → Create Sibling (Vertical) -> **Auto Edit**.
+  - `Tab` → Create Child (Horizontal) -> **Auto Edit**.
+  - `Arrow keys` → Navigate tree.
+  - `Delete/Backspace` → Delete node -> Focus adjacent.
+  - `Any Character Key` → Switch to Edit Mode -> Input character.
+- **Edit Mode (Typing)**:
+  - `Enter` → Confirm input -> Return to **Selection Mode**.
+  - `Tab` → Confirm input -> Create Child -> **Auto Edit**.
+  - `Escape` → Cancel edit -> Return to Selection Mode.
+- **IME Composition**:
+  - `Enter` determines the converted text (does NOT exit Edit Mode).
 
 ## 4. Selection / Visual State
-- Do NOT override ReactFlow selection via `nodes[].selected`.
-- Task selection must be visually clear (ring/glow).
-- Selection should not be lost during save or focus changes.
+- **Selection Mode**: Shows a clear blue border (ring).
+- **Edit Mode**: Shows the text input caret.
+- Selection must persist correctly after drag/drop or layout updates.
 
 ## 5. Non-Negotiable Constraints
-- Do not remove Dagre layout or existing Focus Polling logic.
+- Do not remove Dagre layout logic.
 - Do not break Marquee multi-select or bulk delete.
-- Keep all existing node creation/edit/delete functionality intact.
-
+- **Performance**: No artificial delays (e.g., waiting for DB) in UI interactions.

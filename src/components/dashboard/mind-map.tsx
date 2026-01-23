@@ -678,14 +678,9 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
                         setShowCaret(false);
                     }
                 }}
-                onMouseDown={(e) => {
-                    if (!showCaret) {
-                        e.preventDefault(); // avoid text selection in Selection Mode
-                    }
-                }}
                 className={cn(
                     "nodrag nopan flex-1 bg-transparent border-none text-xs focus:outline-none focus:ring-0 px-0.5 min-w-0",
-                    !showCaret && "caret-transparent",
+                    !showCaret && "caret-transparent pointer-events-none select-none",
                     data?.status === 'done' && "line-through text-muted-foreground"
                 )}
             />
