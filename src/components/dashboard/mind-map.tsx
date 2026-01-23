@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useMemo, useState, useEffect, useCallback, useRef, Component, ErrorInfo, ReactNode } from 'react';
+import React, { useMemo, useState, useEffect, useLayoutEffect, useCallback, useRef, Component, ErrorInfo, ReactNode } from 'react';
 import ReactFlow, {
     Node,
     Edge,
@@ -154,12 +154,11 @@ const ProjectNode = React.memo(({ data, selected }: NodeProps) => {
         });
     }, [selected, isEditing]);
 
-    // Auto-focus input when selected (IME-friendly first keystroke)
-    useEffect(() => {
+    // IMPORTANT (IME): focus synchronously when node becomes selected.
+    // Avoid rAF focus that can race with the first composition key and cause "hあ".
+    useLayoutEffect(() => {
         if (selected && !isEditing && inputRef.current) {
-            requestAnimationFrame(() => {
-                inputRef.current?.focus();
-            });
+            inputRef.current.focus();
         }
     }, [selected, isEditing]);
 
@@ -637,11 +636,11 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
     }, [saveValue]);
 
     // Ensure focus when clicked (IME-friendly)
-    const handleWrapperClick = useCallback((e: React.MouseEvent) => {
-        e.stopPropagation();
+    const handleWrapperMouseDown = useCallback((e: React.MouseEvent) => {
+        // Do not stop propagation: ReactFlow needs the event to manage selection.
         if (!isEditing) {
-            inputRef.current?.focus();
             setShowCaret(false);
+            inputRef.current?.focus();
         }
     }, [isEditing]);
 
@@ -655,7 +654,7 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
             tabIndex={0}
             onKeyDown={handleWrapperKeyDown}
             onDoubleClick={handleDoubleClick}
-            onClick={handleWrapperClick}
+            onMouseDown={handleWrapperMouseDown}
         >
             <Handle type="target" position={Position.Left} className="!bg-muted-foreground/50 !w-1 !h-1" />
             <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", data?.status === 'done' ? "bg-primary" : "bg-muted-foreground/30")} />
