@@ -1,10 +1,6 @@
 "use client"
 
-<<<<<<< HEAD
 import React, { useMemo, useState, useEffect, useLayoutEffect, useCallback, useRef, Component, ErrorInfo, ReactNode } from 'react';
-=======
-import React, { useMemo, useState, useEffect, useCallback, useRef, Component, ErrorInfo, ReactNode } from 'react';
->>>>>>> 2589f58 (fix: IME first-keystroke focus + add mindmap UX rules doc)
 import ReactFlow, {
     Node,
     Edge,
@@ -145,35 +141,13 @@ const ProjectNode = React.memo(({ data, selected }: NodeProps) => {
         }
     }, [data?.label, isEditing]);
 
-    // Auto-focus input when selected or entering edit mode
-    // IMPORTANT: keep the same <input> mounted while selected so the first keystroke is not lost (IME-friendly)
-    useEffect(() => {
-        if (!selected || !inputRef.current) return;
-        requestAnimationFrame(() => {
-            inputRef.current?.focus();
-            if (!isEditing) {
-                // Selection mode: select all for quick replace (doesn't break IME when input is already focused)
-                inputRef.current?.select();
-            }
-        });
-    }, [selected, isEditing]);
-
-<<<<<<< HEAD
     // IMPORTANT (IME): focus synchronously when node becomes selected.
-    // Avoid rAF focus that can race with the first composition key and cause "hあ".
+    // Avoid rAF/select that can race with the first composition key and cause "hあ".
     useLayoutEffect(() => {
-        if (selected && !isEditing && inputRef.current) {
+        if (selected && inputRef.current) {
             inputRef.current.focus();
-=======
-    // Auto-focus input when selected (IME-friendly first keystroke)
-    useEffect(() => {
-        if (selected && !isEditing && inputRef.current) {
-            requestAnimationFrame(() => {
-                inputRef.current?.focus();
-            });
->>>>>>> 2589f58 (fix: IME first-keystroke focus + add mindmap UX rules doc)
         }
-    }, [selected, isEditing]);
+    }, [selected]);
 
     const saveValue = useCallback(async () => {
         const trimmed = editValue.trim();
@@ -443,6 +417,7 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
     useEffect(() => {
         if (data?.triggerEdit && !isEditing) {
             setIsEditing(true);
+            setShowCaret(true);
             setEditValue(data?.initialValue ?? '');
         }
     }, [data?.triggerEdit, data?.initialValue, isEditing]);
@@ -454,51 +429,33 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
         }
     }, [data?.label, isEditing]);
 
-    // Auto-focus input
+    // Auto-focus input when editing (avoid rAF/select to keep IME stable)
     useEffect(() => {
-        if (isEditing && inputRef.current) {
-            // Use requestAnimationFrame to ensure DOM is ready
-            requestAnimationFrame(() => {
-                inputRef.current?.focus();
-                if (!showCaret) {
-                    inputRef.current?.select();
-                } else {
-                    const len = inputRef.current?.value.length ?? 0;
-                    inputRef.current?.setSelectionRange(len, len);
-                }
-            });
+        if (isEditing && inputRef.current && document.activeElement !== inputRef.current) {
+            inputRef.current.focus();
         }
-    }, [isEditing, showCaret]);
+    }, [isEditing]);
 
-    // Auto-focus input when selected (IME-friendly first keystroke)
-    useEffect(() => {
-        if (selected && !isEditing && inputRef.current) {
-            requestAnimationFrame(() => {
-                inputRef.current?.focus();
-                inputRef.current?.select();
-            });
+    // Auto-focus input when selected so the first key goes to IME safely
+    useLayoutEffect(() => {
+        if (selected && inputRef.current) {
+            inputRef.current.focus();
+            if (!isEditing) {
+                setShowCaret(false);
+            }
         }
     }, [selected, isEditing]);
-
-    // Debounce timer for delayed Supabase save (1.5s)
-    const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
     const saveValue = useCallback(async () => {
         const trimmed = editValue.trim() || 'Task';
 
-        // Clear any existing save timer
-        if (saveTimerRef.current) {
-            clearTimeout(saveTimerRef.current);
-        }
-
-        // Debounced save: wait 1.5s before sending to Supabase
-        // This prioritizes UI responsiveness over immediate persistence
         if (trimmed !== data?.label && data?.onSave) {
-            saveTimerRef.current = setTimeout(async () => {
-                console.log('[TaskNode] Debounced save triggered for:', trimmed);
-                await data.onSave(trimmed);
-                saveTimerRef.current = null;
-            }, 1500);
+            console.log('[TaskNode] Optimistic save (background):', trimmed);
+            Promise.resolve()
+                .then(() => data.onSave!(trimmed))
+                .catch((error: unknown) => {
+                    console.error('[TaskNode] Save failed:', error);
+                });
         }
 
         return trimmed;
@@ -539,13 +496,9 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
                 return;
             }
             if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-<<<<<<< HEAD
-                // IMPORTANT (IME): for character input, do not change state here.
-                // Let the input receive the key/composition; onChange/onCompositionStart will flip editing.
-=======
-                // IMPORTANT (IME): don't change state here.
-                // Let the input receive the key/composition naturally.
->>>>>>> 2589f58 (fix: IME first-keystroke focus + add mindmap UX rules doc)
+                // Selection Mode -> Edit Mode: allow IME to start from first key
+                setIsEditing(true);
+                setShowCaret(true);
                 return;
             }
         }
@@ -616,10 +569,10 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
                 data.onNavigate(e.key as 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight');
             }
         } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-            // IMPORTANT (IME): don't inject the first character into state (causes "kあ").
-            // Focus input and allow native composition.
+            // Fallback: focus input and enter edit mode (IME-friendly)
             inputRef.current?.focus();
-            setShowCaret(false);
+            setIsEditing(true);
+            setShowCaret(true);
         }
     }, [isEditing, data]);
 
@@ -684,7 +637,7 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
                 onChange={(e) => {
                     if (!isEditing) {
                         setIsEditing(true);
-                        setShowCaret(false);
+                        setShowCaret(true);
                     }
                     setEditValue(e.target.value);
                 }}
@@ -693,7 +646,7 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
                 onCompositionStart={() => {
                     if (!isEditing) {
                         setIsEditing(true);
-                        setShowCaret(false);
+                        setShowCaret(true);
                     }
                 }}
                 className={cn(
@@ -979,11 +932,11 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
         const currentIndex = allSiblings.findIndex(t => t.id === taskId);
 
         // Delete focus order:
-        // - If an upper sibling exists -> move up
-        // - Else if siblings remain -> move to the bottom-most sibling
-        // - Else -> move to parent, then group
+        // - Upper sibling
+        // - Lower sibling
+        // - Parent (fallback to group)
         if (currentIndex > 0) return allSiblings[currentIndex - 1].id;
-        if (allSiblings.length > 1) return allSiblings[allSiblings.length - 1].id;
+        if (currentIndex === 0 && allSiblings.length > 1) return allSiblings[1].id;
         if (task.parent_task_id) return task.parent_task_id;
         return task.group_id;
     }, [tasks, getTaskById]);
