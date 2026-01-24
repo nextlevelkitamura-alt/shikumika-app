@@ -22,7 +22,7 @@ interface DateTimePickerProps {
 }
 
 // ----------------------------------------------------------------------
-// Time Wheel Component (Improved & Simplified)
+// Time Wheel Component (Split Hours / Minutes)
 // ----------------------------------------------------------------------
 function TimeWheel({
     selectedDate,
@@ -32,63 +32,79 @@ function TimeWheel({
     onTimeChange: (type: "hour" | "minute", value: number) => void
 }) {
     const hours = Array.from({ length: 24 }, (_, i) => i);
-    const minutes = Array.from({ length: 12 }, (_, i) => i * 5); // 0, 5, 10...
+    // 5-minute increments
+    const minutes = Array.from({ length: 12 }, (_, i) => i * 5);
+
+    // Helper to scroll to selected element (simplified approach: padding ensures center)
+    // For a robust implementation, we might need refs, but for now CSS centering suffices.
 
     return (
         <div className="flex flex-col h-[280px] w-[90px] shrink-0 border-l border-zinc-800 ml-2 pl-2">
             {/* Header */}
-            <div className="flex items-center justify-center gap-1 py-2 mb-1 text-[11px] font-medium text-muted-foreground border-b border-zinc-800 select-none">
-                <Clock className="w-3 h-3" />
-                <span>TIME</span>
+            <div className="flex items-center justify-around py-2 mb-1 text-[10px] font-medium text-muted-foreground border-b border-zinc-800 select-none">
+                <span>時</span>
+                <span>分</span>
             </div>
 
             {/* Scrollable Area */}
             <div className="flex flex-1 relative h-full overflow-hidden">
-                {/* Hours */}
+                {/* Hours Column */}
                 <ScrollArea className="h-full flex-1">
-                    <div className="flex flex-col items-center py-20 space-y-1">
-                        {hours.map((h) => (
-                            <button
-                                key={h}
-                                type="button"
-                                className={cn(
-                                    "w-7 h-7 rounded-full text-xs flex items-center justify-center transition-all shrink-0 font-medium",
-                                    selectedDate?.getHours() === h
-                                        ? "bg-white text-black font-bold shadow-sm scale-110"
-                                        : "text-zinc-500 hover:text-white hover:bg-zinc-800"
-                                )}
-                                onClick={() => onTimeChange("hour", h)}
-                            >
-                                {h.toString().padStart(2, '0')}
-                            </button>
-                        ))}
+                    <div className="flex flex-col items-center py-24 space-y-1">
+                        {hours.map((h) => {
+                            const isSelected = selectedDate?.getHours() === h;
+                            return (
+                                <button
+                                    key={h}
+                                    type="button"
+                                    className={cn(
+                                        "w-8 h-7 rounded-md text-xs flex items-center justify-center transition-all shrink-0 font-medium",
+                                        isSelected
+                                            ? "bg-zinc-800 text-white font-bold shadow-sm"
+                                            : "text-zinc-500 hover:text-white hover:bg-zinc-800/50"
+                                    )}
+                                    onClick={() => onTimeChange("hour", h)}
+                                >
+                                    {h.toString().padStart(2, '0')}
+                                </button>
+                            );
+                        })}
                     </div>
                 </ScrollArea>
 
-                <div className="flex items-center justify-center pt-20 h-full px-0.5">
-                    <span className="text-zinc-600 font-light pb-1">:</span>
-                </div>
+                {/* Separator Line (Visual) */}
+                <div className="w-[1px] h-full bg-zinc-800/50 mx-0.5" />
 
-                {/* Minutes */}
+                {/* Minutes Column */}
                 <ScrollArea className="h-full flex-1">
-                    <div className="flex flex-col items-center py-20 space-y-1">
-                        {minutes.map((m) => (
-                            <button
-                                key={m}
-                                type="button"
-                                className={cn(
-                                    "w-7 h-7 rounded-full text-xs flex items-center justify-center transition-all shrink-0 font-medium",
-                                    selectedDate?.getMinutes() === m
-                                        ? "bg-white text-black font-bold shadow-sm scale-110"
-                                        : "text-zinc-500 hover:text-white hover:bg-zinc-800"
-                                )}
-                                onClick={() => onTimeChange("minute", m)}
-                            >
-                                {m.toString().padStart(2, '0')}
-                            </button>
-                        ))}
+                    <div className="flex flex-col items-center py-24 space-y-1">
+                        {minutes.map((m) => {
+                            const currentMin = selectedDate?.getMinutes() || 0;
+                            // Check if selected minute matches (handling exact match for 5-min steps)
+                            const isSelected = currentMin === m;
+
+                            return (
+                                <button
+                                    key={m}
+                                    type="button"
+                                    className={cn(
+                                        "w-8 h-7 rounded-md text-xs flex items-center justify-center transition-all shrink-0 font-medium",
+                                        isSelected
+                                            ? "bg-zinc-800 text-white font-bold shadow-sm"
+                                            : "text-zinc-500 hover:text-white hover:bg-zinc-800/50"
+                                    )}
+                                    // Handle minute change
+                                    onClick={() => onTimeChange("minute", m)}
+                                >
+                                    {m.toString().padStart(2, '0')}
+                                </button>
+                            );
+                        })}
                     </div>
                 </ScrollArea>
+
+                {/* Center Highlight Overlay (Optional visual cue) */}
+                <div className="absolute top-1/2 left-0 right-0 -translate-y-1/2 h-7 bg-zinc-800/10 pointer-events-none rounded sm:hidden" />
             </div>
         </div>
     );
@@ -103,36 +119,43 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
     // Internal state for calendar navigation (Month view)
     const [currentMonth, setCurrentMonth] = React.useState<Date>(new Date())
 
-    // Sync external date to internal state when opening/changing
+    // Internal temporary state for "Set" / "Cancel" logic
+    // We only commit to `setDate` (parent) when "Set" is clicked.
+    const [tempDate, setTempDate] = React.useState<Date | undefined>(date)
+
+    // Sync external date to internal state when opening
     React.useEffect(() => {
-        if (date) {
-            setCurrentMonth(date)
+        if (isOpen) {
+            setTempDate(date || new Date())
+            setCurrentMonth(date || new Date())
         }
-    }, [date])
+    }, [isOpen, date])
 
     // Handlers
     const handleDateSelect = (newDate: Date | undefined) => {
-        if (!newDate) {
-            setDate(undefined)
-            return
-        }
-        // Preserve current time
-        const current = date || new Date()
+        if (!newDate) return
+
+        // Preserve current time from tempDate
+        const current = tempDate || new Date()
         newDate.setHours(current.getHours())
         newDate.setMinutes(current.getMinutes())
-        setDate(newDate)
+        setTempDate(newDate)
     }
 
     const handleTimeChange = (type: "hour" | "minute", value: number) => {
-        const newDate = date ? new Date(date) : new Date()
+        const newDate = tempDate ? new Date(tempDate) : new Date()
         if (type === "hour") {
             newDate.setHours(value)
         } else {
             newDate.setMinutes(value)
         }
-        setDate(newDate)
-        // Ensure month view follows selection if it changes drastically (optional)
-        // setCurrentMonth(newDate) 
+        setTempDate(newDate)
+    }
+
+    // Commit changes
+    const onConfirm = () => {
+        setDate(tempDate)
+        setIsOpen(false)
     }
 
     return (
@@ -155,29 +178,24 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
                 className="w-auto p-0 border border-zinc-800 bg-[#18181b] shadow-2xl rounded-xl overflow-hidden"
                 align="start"
             >
-                <div className="flex p-4">
-                    {/* 
-                      LEFT SIDE: CALENDAR 
-                      Clean implementation using react-day-picker standard styling override.
-                    */}
+                <div className="flex p-4 pb-2">
+                    {/* LEFT: CALENDAR */}
                     <div className="flex flex-col">
                         <Calendar
                             mode="single"
                             month={currentMonth}
                             onMonthChange={setCurrentMonth}
-                            selected={date}
+                            selected={tempDate}
                             onSelect={handleDateSelect}
                             locale={ja}
-                            weekStartsOn={1} // Monday start (if desired) or 0 (Sunday). Defaulting to Sunday as per last viable "Ideal" image which had "日" at left. Note: User feedback varied, sticking to standard "Ideal" image (Sunday) for now unless otherwise specified.
-                            // Actually, let's stick to Sunday Start (0) to match standard calendars unless explicitly asked for Monday again. 
-                            // Re-reading user request: "謎の文字...消して" (Remove mysterious chars). Keep it simple.
-                            showOutsideDays={false} // Clean. No numbers from prev/next month.
-                            fixedWeeks // Stable height
+                            weekStartsOn={1} // Monday start (if desired, usually 0/1 depending on preference. Keeping 1 for consistency with '月' start request)
+                            showOutsideDays={false}
+                            fixedWeeks
                             className="p-0"
                             classNames={{
                                 months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
                                 month: "space-y-4",
-                                caption: "flex justify-center pt-1 relative items-center mb-2", // Header (Month Year)
+                                caption: "flex justify-center pt-1 relative items-center mb-2",
                                 caption_label: "text-base font-bold text-zinc-100",
                                 nav: "space-x-1 flex items-center",
                                 nav_button: cn(
@@ -186,14 +204,16 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
                                 ),
                                 nav_button_previous: "absolute left-1",
                                 nav_button_next: "absolute right-1",
-                                table: "w-full border-collapse space-y-1 table-fixed", // Force fixed layout
-                                head_row: "table-row mb-2", // Standard table row
-                                head_cell: "text-zinc-500 rounded-md w-9 font-normal text-[0.8rem] text-center align-middle h-8", // Align middle
-                                row: "table-row w-full mt-2", // Standard table row
+                                // Table Layout: FIXED for perfect alignment
+                                table: "w-full border-collapse space-y-1 table-fixed",
+                                head_row: "table-row mb-2",
+                                head_cell: "text-zinc-500 rounded-md w-9 font-normal text-[0.8rem] text-center align-middle h-8",
+                                row: "table-row w-full mt-2",
                                 cell: "h-9 w-9 text-center text-sm p-0 relative [&:has([aria-selected].day-range-end)]:rounded-r-md [&:has([aria-selected].day-outside)]:bg-accent/50 [&:has([aria-selected])]:bg-accent first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20 align-middle",
+                                // Removed fixed width from 'day' to let table-fixed handle distribution
                                 day: cn(
                                     buttonVariants({ variant: "ghost" }),
-                                    "h-9 w-9 p-0 font-normal aria-selected:opacity-100 text-zinc-300 hover:bg-zinc-800 hover:text-white mx-auto" // mx-auto for safety
+                                    "h-9 w-full p-0 font-normal aria-selected:opacity-100 text-zinc-300 hover:bg-zinc-800 hover:text-white mx-auto aspect-square"
                                 ),
                                 day_range_end: "day-range-end",
                                 day_selected: "bg-zinc-100 text-zinc-900 hover:bg-zinc-100 hover:text-zinc-900 focus:bg-zinc-100 focus:text-zinc-900 font-bold rounded-md",
@@ -205,8 +225,25 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
                         />
                     </div>
 
-                    {/* RIGHT SIDE: TIME WHEEL */}
-                    <TimeWheel selectedDate={date} onTimeChange={handleTimeChange} />
+                    {/* RIGHT: TIME WHEEL */}
+                    <TimeWheel selectedDate={tempDate} onTimeChange={handleTimeChange} />
+                </div>
+
+                {/* FOOTER: Action Buttons */}
+                <div className="flex items-center justify-between border-t border-zinc-800 bg-[#18181b] p-2">
+                    <Button
+                        variant="ghost"
+                        className="text-xs text-zinc-400 hover:text-white h-8 px-4"
+                        onClick={() => setIsOpen(false)}
+                    >
+                        キャンセル
+                    </Button>
+                    <Button
+                        className="text-xs h-8 px-4 bg-zinc-100 text-black hover:bg-white"
+                        onClick={onConfirm}
+                    >
+                        設定
+                    </Button>
                 </div>
             </PopoverContent>
         </Popover>
