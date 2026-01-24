@@ -28,11 +28,11 @@ type Task = Database['public']['Tables']['tasks']['Row']
 const dagreGraph = new dagre.graphlib.Graph();
 dagreGraph.setDefaultEdgeLabel(() => ({}));
 
-const NODE_WIDTH = 150;
+const NODE_WIDTH = 225; // 1.5x of 150
 const NODE_HEIGHT = 40;
-const PROJECT_NODE_WIDTH = 200;
+const PROJECT_NODE_WIDTH = 300; // 1.5x of 200
 const PROJECT_NODE_HEIGHT = 60;
-const GROUP_NODE_WIDTH = 160;
+const GROUP_NODE_WIDTH = 240; // 1.5x of 160
 const GROUP_NODE_HEIGHT = 50;
 
 function getLayoutedElements(nodes: Node[], edges: Edge[]): { nodes: Node[], edges: Edge[] } {
@@ -268,7 +268,7 @@ const ProjectNode = React.memo(({ data, selected }: NodeProps) => {
         <div
             ref={wrapperRef}
             className={cn(
-                "w-[180px] px-4 py-3 rounded-xl bg-primary text-primary-foreground font-bold text-center shadow-lg transition-all outline-none",
+                "w-[300px] px-4 py-3 rounded-xl bg-primary text-primary-foreground font-bold text-center shadow-lg transition-all outline-none min-h-[60px] flex items-center justify-center",
                 selected && "ring-2 ring-white ring-offset-2 ring-offset-background"
             )}
             tabIndex={0}
@@ -276,21 +276,25 @@ const ProjectNode = React.memo(({ data, selected }: NodeProps) => {
             onDoubleClick={handleDoubleClick}
         >
             {(selected || isEditing) ? (
-                <input
-                    ref={inputRef}
-                    type="text"
+                <textarea
+                    ref={inputRef as any}
+                    rows={1}
                     value={editValue}
-                    onChange={(e) => setEditValue(e.target.value)}
+                    onChange={(e) => {
+                        setEditValue(e.target.value);
+                        // Auto-resize
+                        e.target.style.height = 'auto';
+                        e.target.style.height = `${e.target.scrollHeight}px`;
+                    }}
                     onBlur={handleInputBlur}
-                    onKeyDown={handleInputKeyDown}
+                    onKeyDown={handleInputKeyDown as any}
                     onClick={(e) => {
-                        // In selection mode we allow bubbling so ReactFlow can select the node on click.
                         if (isEditing) e.stopPropagation();
                     }}
-                    className="nodrag nopan w-full bg-transparent border-none text-center font-bold focus:outline-none focus:ring-0 text-primary-foreground"
+                    className="nodrag nopan w-full bg-transparent border-none text-center font-bold focus:outline-none focus:ring-0 text-primary-foreground resize-none overflow-hidden"
                 />
             ) : (
-                data?.label ?? 'Project'
+                <div className="whitespace-pre-wrap break-words">{data?.label ?? 'Project'}</div>
             )}
             <Handle type="source" position={Position.Right} className="!bg-primary-foreground" />
         </div>
@@ -412,7 +416,7 @@ const GroupNode = React.memo(({ data, selected }: NodeProps) => {
         <div
             ref={wrapperRef}
             className={cn(
-                "w-[150px] px-3 py-2 rounded-lg bg-card border text-sm font-medium text-center shadow transition-all outline-none",
+                "w-[240px] px-3 py-2 rounded-lg bg-card border text-sm font-medium text-center shadow transition-all outline-none min-h-[40px] flex items-center justify-center",
                 selected && "ring-2 ring-white ring-offset-2 ring-offset-background",
                 data?.isDropTarget && "ring-2 ring-sky-400 ring-offset-2 ring-offset-background"
             )}
@@ -423,7 +427,7 @@ const GroupNode = React.memo(({ data, selected }: NodeProps) => {
             {data?.onToggleCollapse && data?.hasChildren && (
                 <button
                     type="button"
-                    className="nodrag nopan mr-1 text-[10px] text-muted-foreground hover:text-foreground"
+                    className="nodrag nopan mr-1 text-[10px] text-muted-foreground hover:text-foreground shrink-0"
                     onClick={(e) => {
                         e.stopPropagation();
                         data.onToggleCollapse?.();
@@ -434,9 +438,9 @@ const GroupNode = React.memo(({ data, selected }: NodeProps) => {
                 </button>
             )}
             <Handle type="target" position={Position.Left} className="!bg-muted-foreground" />
-            <input
-                ref={inputRef}
-                type="text"
+            <textarea
+                ref={inputRef as any}
+                rows={1}
                 value={editValue}
                 onChange={(e) => {
                     if (!isEditing) {
@@ -444,9 +448,11 @@ const GroupNode = React.memo(({ data, selected }: NodeProps) => {
                         setShowCaret(true);
                     }
                     setEditValue(e.target.value);
+                    e.target.style.height = 'auto';
+                    e.target.style.height = `${e.target.scrollHeight}px`;
                 }}
                 onBlur={handleInputBlur}
-                onKeyDown={handleInputKeyDown}
+                onKeyDown={handleInputKeyDown as any}
                 onClick={(e) => {
                     if (isEditing) e.stopPropagation();
                 }}
@@ -457,7 +463,7 @@ const GroupNode = React.memo(({ data, selected }: NodeProps) => {
                     }
                 }}
                 className={cn(
-                    "nodrag nopan w-full bg-transparent border-none text-sm text-center focus:outline-none focus:ring-0",
+                    "nodrag nopan w-full bg-transparent border-none text-sm text-center focus:outline-none focus:ring-0 resize-none overflow-hidden",
                     !showCaret && "caret-transparent pointer-events-none select-none"
                 )}
             />
@@ -690,7 +696,7 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
         <div
             ref={wrapperRef}
             className={cn(
-                "w-[140px] px-2 py-1.5 rounded bg-background border text-xs shadow-sm flex items-center gap-1 transition-all outline-none",
+                "w-[225px] px-2 py-1.5 rounded bg-background border text-xs shadow-sm flex items-center gap-1 transition-all outline-none min-h-[30px]",
                 (selected || data?.isSelected) && "ring-2 ring-sky-400 ring-offset-1 ring-offset-background border-sky-400 shadow-[0_0_0_2px_rgba(56,189,248,0.20)]",
                 data?.isDropTarget && "ring-2 ring-emerald-400 ring-offset-1 ring-offset-background border-emerald-400"
             )}
@@ -702,7 +708,7 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
             {data?.onToggleCollapse && data?.hasChildren && (
                 <button
                     type="button"
-                    className="nodrag nopan w-3 h-3 text-[10px] leading-none text-muted-foreground hover:text-foreground"
+                    className="nodrag nopan w-3 h-3 text-[10px] leading-none text-muted-foreground hover:text-foreground shrink-0"
                     onClick={(e) => {
                         e.stopPropagation();
                         data.onToggleCollapse?.();
@@ -715,9 +721,9 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
             <Handle type="target" position={Position.Left} className="!bg-muted-foreground/50 !w-1 !h-1" />
             <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", data?.status === 'done' ? "bg-primary" : "bg-muted-foreground/30")} />
 
-            <input
-                ref={inputRef}
-                type="text"
+            <textarea
+                ref={inputRef as any}
+                rows={1}
                 value={editValue}
                 onChange={(e) => {
                     if (!isEditing) {
@@ -725,9 +731,11 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
                         setShowCaret(true);
                     }
                     setEditValue(e.target.value);
+                    e.target.style.height = 'auto';
+                    e.target.style.height = `${e.target.scrollHeight}px`;
                 }}
                 onBlur={handleInputBlur}
-                onKeyDown={handleInputKeyDown}
+                onKeyDown={handleInputKeyDown as any}
                 onCompositionStart={() => {
                     if (!isEditing) {
                         setIsEditing(true);
@@ -735,7 +743,7 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
                     }
                 }}
                 className={cn(
-                    "nodrag nopan flex-1 bg-transparent border-none text-xs focus:outline-none focus:ring-0 px-0.5 min-w-0",
+                    "nodrag nopan flex-1 bg-transparent border-none text-xs focus:outline-none focus:ring-0 px-0.5 min-w-0 resize-none overflow-hidden whitespace-pre-wrap break-words",
                     !showCaret && "caret-transparent pointer-events-none select-none",
                     data?.status === 'done' && "line-through text-muted-foreground"
                 )}
