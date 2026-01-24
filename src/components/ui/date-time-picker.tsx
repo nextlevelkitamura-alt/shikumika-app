@@ -21,6 +21,70 @@ interface DateTimePickerProps {
     trigger?: React.ReactNode
 }
 
+// Wheel-style Time Picker Component
+function TimeWheel({
+    selectedDate,
+    onTimeChange
+}: {
+    selectedDate: Date | undefined,
+    onTimeChange: (type: "hour" | "minute", value: number) => void
+}) {
+    const hours = Array.from({ length: 24 }, (_, i) => i);
+    const minutes = Array.from({ length: 12 }, (_, i) => i * 5); // 5分刻み
+
+    return (
+        <div className="flex flex-col h-full border-l pl-3 ml-3">
+            <div className="flex items-center gap-2 mb-2 text-xs font-semibold text-muted-foreground pb-2 border-b">
+                <Clock className="w-3.5 h-3.5" />
+                <span>時間</span>
+            </div>
+            <div className="flex gap-1 h-[240px]">
+                {/* Hours */}
+                <ScrollArea className="h-full w-12 rounded-md border bg-background/50">
+                    <div className="flex flex-col items-center py-24 space-y-1"> {/* Padding for center selection feel */}
+                        {hours.map((h) => (
+                            <button
+                                key={h}
+                                className={cn(
+                                    "w-8 h-8 rounded-full text-xs flex items-center justify-center transition-all shrink-0",
+                                    selectedDate?.getHours() === h
+                                        ? "bg-primary text-primary-foreground font-bold scale-110"
+                                        : "text-muted-foreground hover:bg-muted"
+                                )}
+                                onClick={() => onTimeChange("hour", h)}
+                            >
+                                {h.toString().padStart(2, '0')}
+                            </button>
+                        ))}
+                    </div>
+                </ScrollArea>
+
+                <span className="flex items-center text-muted-foreground font-bold pb-2">:</span>
+
+                {/* Minutes */}
+                <ScrollArea className="h-full w-12 rounded-md border bg-background/50">
+                    <div className="flex flex-col items-center py-24 space-y-1">
+                        {minutes.map((m) => (
+                            <button
+                                key={m}
+                                className={cn(
+                                    "w-8 h-8 rounded-full text-xs flex items-center justify-center transition-all shrink-0",
+                                    selectedDate?.getMinutes() === m
+                                        ? "bg-primary text-primary-foreground font-bold scale-110"
+                                        : "text-muted-foreground hover:bg-muted"
+                                )}
+                                onClick={() => onTimeChange("minute", m)}
+                            >
+                                {m.toString().padStart(2, '0')}
+                            </button>
+                        ))}
+                    </div>
+                </ScrollArea>
+            </div>
+        </div>
+    );
+}
+
 export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) {
     const [selectedDate, setSelectedDate] = React.useState<Date | undefined>(date)
     const [currentMonth, setCurrentMonth] = React.useState<Date>(date || new Date())
@@ -63,53 +127,6 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
         setCurrentMonth(newMonth)
     }
 
-    const hours = Array.from({ length: 24 }, (_, i) => i)
-    const minutes = Array.from({ length: 12 }, (_, i) => i * 5) // 5分刻み
-
-    // Time Picker - positioned where "Mo Tu We..." header used to be
-    const TimePickerSection = () => (
-        <div className="flex items-center justify-center gap-2 py-2 border-b border-t bg-muted/10">
-            <Clock className="w-3.5 h-3.5 text-muted-foreground mr-1" />
-            <div className="flex items-center gap-1">
-                {/* Hours Scroll */}
-                <ScrollArea className="h-8 w-14 border rounded bg-background shadow-sm">
-                    <div className="flex flex-col items-center">
-                        {hours.map((h) => (
-                            <div
-                                key={h}
-                                className={cn(
-                                    "w-full text-center text-xs py-1 cursor-pointer hover:bg-accent transition-colors",
-                                    selectedDate?.getHours() === h && "bg-primary text-primary-foreground font-bold"
-                                )}
-                                onClick={() => handleTimeChange("hour", h)}
-                            >
-                                {h.toString().padStart(2, '0')}
-                            </div>
-                        ))}
-                    </div>
-                </ScrollArea>
-                <span className="text-sm font-bold text-muted-foreground">:</span>
-                {/* Minutes Scroll */}
-                <ScrollArea className="h-8 w-14 border rounded bg-background shadow-sm">
-                    <div className="flex flex-col items-center">
-                        {minutes.map((m) => (
-                            <div
-                                key={m}
-                                className={cn(
-                                    "w-full text-center text-xs py-1 cursor-pointer hover:bg-accent transition-colors",
-                                    selectedDate?.getMinutes() === m && "bg-primary text-primary-foreground font-bold"
-                                )}
-                                onClick={() => handleTimeChange("minute", m)}
-                            >
-                                {m.toString().padStart(2, '0')}
-                            </div>
-                        ))}
-                    </div>
-                </ScrollArea>
-            </div>
-        </div>
-    )
-
     return (
         <Popover open={isOpen} onOpenChange={setIsOpen}>
             <PopoverTrigger asChild>
@@ -127,49 +144,59 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
                 )}
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="start">
-                <div className="p-3 w-[280px]"> {/* Fixed width container */}
-                    {/* 1. Custom Month Navigation (Fixed Position) */}
-                    <div className="flex items-center justify-between mb-2 px-1">
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleMonthChange(-1)}>
-                            <ChevronLeft className="h-4 w-4" />
-                        </Button>
-                        <div className="font-semibold text-sm">
-                            {format(currentMonth, "yyyy年 M月", { locale: ja })}
+                <div className="flex p-3">
+                    {/* Left Side: Calendar */}
+                    <div className="flex flex-col space-y-3">
+                        {/* Custom Header: Month Nav */}
+                        <div className="flex items-center justify-between px-1">
+                            <div className="font-semibold text-sm pl-1">
+                                {format(currentMonth, "yyyy年 M月", { locale: ja })}
+                            </div>
+                            <div className="flex items-center gap-1">
+                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleMonthChange(-1)}>
+                                    <ChevronLeft className="h-4 w-4" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleMonthChange(1)}>
+                                    <ChevronRight className="h-4 w-4" />
+                                </Button>
+                            </div>
                         </div>
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleMonthChange(1)}>
-                            <ChevronRight className="h-4 w-4" />
-                        </Button>
+
+                        <Calendar
+                            mode="single"
+                            month={currentMonth}
+                            onMonthChange={setCurrentMonth}
+                            selected={selectedDate}
+                            onSelect={handleDateSelect}
+                            locale={ja}
+                            showOutsideDays={false}
+                            fixedWeeks
+                            className="p-0"
+                            classNames={{
+                                caption: "hidden", // Hide default caption
+                                nav: "hidden",     // Hide default nav
+                                month: "space-y-4",
+                                table: "w-full border-collapse space-y-1",
+                                head_row: "flex mb-2",
+                                head_cell: "text-muted-foreground rounded-md w-8 font-normal text-[0.8rem] text-center",
+                                row: "flex w-full mt-2 gap-0", // FLEX GAP FIX
+                                cell: "h-8 w-8 text-center text-sm p-0 flex items-center justify-center relative [&:has([aria-selected].day-range-end)]:rounded-r-md [&:has([aria-selected].day-outside)]:bg-accent/50 [&:has([aria-selected])]:bg-accent first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20",
+                                day: cn(
+                                    buttonVariants({ variant: "ghost" }),
+                                    "h-8 w-8 p-0 font-normal aria-selected:opacity-100"
+                                ),
+                                day_range_end: "day-range-end",
+                                day_selected: "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
+                                day_today: "bg-accent text-accent-foreground",
+                                day_outside: "day-outside text-muted-foreground opacity-50 aria-selected:bg-accent/50 aria-selected:text-muted-foreground aria-selected:opacity-30",
+                                day_disabled: "text-muted-foreground opacity-50",
+                                day_hidden: "invisible",
+                            }}
+                        />
                     </div>
 
-                    {/* 4. Time Picker in Header Area */}
-                    <TimePickerSection />
-
-                    {/* Calendar Grid */}
-                    <Calendar
-                        mode="single"
-                        month={currentMonth}
-                        onMonthChange={setCurrentMonth}
-                        selected={selectedDate}
-                        onSelect={handleDateSelect}
-                        locale={ja}
-                        showOutsideDays={false} // 5. Hide outside days
-                        fixedWeeks // 3. Prevent jumping
-                        className="p-0 mt-2"
-                        classNames={{
-                            // Hide default navigation and headers
-                            caption: "hidden",
-                            nav: "hidden",
-                            head_row: "hidden", // 2. Remove day headers
-                            month: "space-y-0", // Compact spacing
-                            table: "w-full border-collapse",
-                            row: "flex w-full mt-1",
-                            cell: "h-8 w-8 text-center text-sm p-0 flex items-center justify-center relative [&:has([aria-selected].day-range-end)]:rounded-r-md [&:has([aria-selected].day-outside)]:bg-accent/50 [&:has([aria-selected])]:bg-accent first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20",
-                            day: cn(
-                                buttonVariants({ variant: "ghost" }),
-                                "h-8 w-8 p-0 font-normal aria-selected:opacity-100"
-                            ),
-                        }}
-                    />
+                    {/* Right Side: Wheel Time Picker */}
+                    <TimeWheel selectedDate={selectedDate} onTimeChange={handleTimeChange} />
                 </div>
             </PopoverContent>
         </Popover>
