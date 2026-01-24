@@ -146,9 +146,9 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
             <PopoverContent className="w-auto p-0" align="start">
                 <div className="flex p-3">
                     {/* Left Side: Calendar */}
-                    <div className="flex flex-col space-y-3">
-                        {/* Custom Header: Month Nav */}
-                        <div className="flex items-center justify-between px-1">
+                    <div className="flex flex-col w-[260px]">
+                        {/* 1. Custom Header: Year/Month and Nav only (No "Double Header") */}
+                        <div className="flex items-center justify-between px-1 mb-2">
                             <div className="font-semibold text-sm pl-1">
                                 {format(currentMonth, "yyyy年 M月", { locale: ja })}
                             </div>
@@ -162,6 +162,7 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
                             </div>
                         </div>
 
+                        {/* 2. Calendar: Weekdays Enabled */}
                         <Calendar
                             mode="single"
                             month={currentMonth}
@@ -173,13 +174,14 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
                             fixedWeeks
                             className="p-0"
                             classNames={{
-                                caption: "hidden", // Hide default caption
-                                nav: "hidden",     // Hide default nav
-                                month: "space-y-4",
+                                caption: "hidden", // Hide default caption to prevent duplication
+                                nav: "hidden",     // Hide default nav to prevent duplication
+                                month: "space-y-0", // Tighten spacing
                                 table: "w-full border-collapse space-y-1",
-                                head_row: "flex mb-2",
+                                // Ensure Weekday Headers are visible and styled
+                                head_row: "flex w-full mb-1",
                                 head_cell: "text-muted-foreground rounded-md w-8 font-normal text-[0.8rem] text-center",
-                                row: "flex w-full mt-2 gap-0", // FLEX GAP FIX
+                                row: "flex w-full mt-2 gap-0",
                                 cell: "h-8 w-8 text-center text-sm p-0 flex items-center justify-center relative [&:has([aria-selected].day-range-end)]:rounded-r-md [&:has([aria-selected].day-outside)]:bg-accent/50 [&:has([aria-selected])]:bg-accent first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20",
                                 day: cn(
                                     buttonVariants({ variant: "ghost" }),
@@ -191,6 +193,10 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
                                 day_outside: "day-outside text-muted-foreground opacity-50 aria-selected:bg-accent/50 aria-selected:text-muted-foreground aria-selected:opacity-30",
                                 day_disabled: "text-muted-foreground opacity-50",
                                 day_hidden: "invisible",
+                            }}
+                            // Explicitly force FormatCaption to return null if css hiding fails
+                            formatters={{
+                                formatCaption: () => ""
                             }}
                         />
                     </div>
