@@ -178,12 +178,12 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
                                 caption: "hidden",
                                 nav: "hidden",
                                 month: "space-y-0",
-                                table: "w-full border-collapse table-fixed",
-                                head_row: "hidden", // Hide the internal header completely
-                                head_cell: "hidden",
+                                table: "w-full border-collapse",
+                                head_row: "table-row",
+                                head_cell: "table-cell text-center text-[11px] text-zinc-400 pb-1",
                                 tbody: "w-full",
-                                row: "table-row w-full mt-0",
-                                cell: "table-cell p-0 text-center text-xs focus-within:relative focus-within:z-20 aspect-square align-middle",
+                                row: "table-row w-full",
+                                cell: "table-cell p-0 text-center text-xs focus-within:relative focus-within:z-20 align-middle",
                                 day: cn(
                                     buttonVariants({ variant: "ghost" }),
                                     "h-8 w-8 p-0 font-normal aria-selected:opacity-100 rounded-md hover:bg-zinc-800 text-zinc-300 mx-auto"
@@ -191,7 +191,7 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
                                 day_range_end: "day-range-end",
                                 day_selected: "bg-zinc-700 text-white font-semibold",
                                 day_today: "text-white font-semibold",
-                                day_outside: "text-transparent opacity-0 pointer-events-none select-none",
+                                day_outside: "text-zinc-600/50 opacity-60 pointer-events-none select-none",
                                 day_disabled: "text-zinc-600 opacity-50",
                                 day_hidden: "invisible",
                             }}
