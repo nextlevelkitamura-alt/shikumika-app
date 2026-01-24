@@ -129,7 +129,7 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
         setCurrentMonth(newMonth)
     }
 
-    // Manual Weekday Header (Sunday Start to match Ideal Image)
+    // Manual Weekday Header (Strictly matched to Sunday start based on latest request)
     // "日 月 火 水 木 金 土"
     const weekdays = ["日", "月", "火", "水", "木", "金", "土"];
 
@@ -177,7 +177,8 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
                             ))}
                         </div>
 
-                        {/* 3. Calendar with Standard Table Layout (Robust Grid Lines) */}
+                        {/* 3. Calendar with ROBUST STANDARD TABLE LAYOUT */}
+                        {/* We use border-collapse on the table to get minimal, strict grid lines. */}
                         <Calendar
                             mode="single"
                             month={currentMonth}
@@ -185,35 +186,22 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
                             selected={selectedDate}
                             onSelect={handleDateSelect}
                             locale={ja}
-                            showOutsideDays={false} // Match ideal image (empty black cells)
+                            showOutsideDays={true} // True allows offset cells to exist. We hide them via `invisible`.
                             fixedWeeks
                             className="p-0 border-l border-zinc-800"
-                            // Use standard table layout for perfect borders
-                            // table: "w-full border-collapse",
-                            // head_row: "hidden", // We observe the manual header above
-                            // row: "flex w-full mt-0", // react-day-picker v8 uses flex rows by default, we force display:table-row equivalent via parent?
-                            // Actually, react-day-picker renders a table. If we remove 'flex' from 'row', it behaves like a TR.
-                            // Let's clear the 'row' class to let it be a natural TR.
-                            // BUT, shadcn/ui calendar usually forces 'flex'.
-                            // We will force TABLE styling here.
-                            // tbody: "block w-full", // Wait, for border-collapse to work on cells, we need TABLE display.
-                            // Let's try STRICT TABLE override.
-                            // Overriding shadcn styles requires deep class targeting or structural reset.
-                            // Better approach for "Grid Lines": Treat rows as Grid or Flex with borders.
-                            // Let's use the Grid approach which allows borders on cells easily.
-                            // We use the "force block" fix but apply borders to cells.
                             classNames={{
                                 caption: "hidden",
                                 nav: "hidden",
                                 month: "space-y-0",
-                                table: "w-full border-collapse block", // Block table to allow grid row
-                                tbody: "w-full block",
-                                head_row: "hidden",
-                                row: "grid grid-cols-7 w-full border-b border-zinc-800", // Row border
-                                cell: "relative p-0 text-center text-sm focus-within:relative focus-within:z-20 aspect-square border-r border-zinc-800 flex items-center justify-center", // Cell border
+                                // OVERRIDE ALL FLEX STYLES TO TABLE STYLES
+                                table: "w-full border-collapse",
+                                head_row: "hidden", // We observe the manual header above
+                                tbody: "w-full", // Default table-row-group
+                                row: "table-row w-full mt-0 border-b border-zinc-800", // Force table-row to respect border-collapse
+                                cell: "table-cell p-0 text-center text-sm focus-within:relative focus-within:z-20 aspect-square border-r border-zinc-800 align-middle",
                                 day: cn(
                                     buttonVariants({ variant: "ghost" }),
-                                    "h-full w-full p-0 font-normal aria-selected:opacity-100 rounded-none hover:bg-zinc-800 text-zinc-300"
+                                    "h-10 w-10 p-0 font-normal aria-selected:opacity-100 rounded-none hover:bg-zinc-800 text-zinc-300 mx-auto" // Center content
                                 ),
                                 day_range_end: "day-range-end",
                                 day_selected: "bg-transparent text-white font-bold relative after:content-[''] after:absolute after:inset-1 after:bg-zinc-700 after:rounded-full after:-z-10",
