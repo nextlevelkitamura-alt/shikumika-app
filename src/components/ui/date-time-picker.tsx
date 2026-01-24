@@ -1,19 +1,32 @@
 "use client"
 
 import * as React from "react"
+import dynamic from "next/dynamic"
 import { Calendar as CalendarIcon, ChevronDown, ChevronUp } from "lucide-react"
 import { format } from "date-fns"
 import { ja } from "date-fns/locale"
 
 import { cn } from "@/lib/utils"
 import { Button, buttonVariants } from "@/components/ui/button"
-import { Calendar } from "@/components/ui/calendar"
 import {
     Popover,
     PopoverContent,
     PopoverTrigger,
 } from "@/components/ui/popover"
 import { ScrollArea } from "@/components/ui/scroll-area"
+
+// Calendar を dynamic import（SSR を無効化して Hydration Error を回避）
+const Calendar = dynamic(
+    () => import("@/components/ui/calendar").then((mod) => ({ default: mod.Calendar })),
+    {
+        ssr: false,
+        loading: () => (
+            <div className="w-[280px] h-[280px] flex items-center justify-center text-zinc-500 text-xs">
+                読み込み中...
+            </div>
+        ),
+    }
+)
 
 interface DateTimePickerProps {
     date: Date | undefined
@@ -195,9 +208,6 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
                             showOutsideDays
                             fixedWeeks
                             className="p-0"
-                            formatters={{
-                                formatCaption: (m) => format(m, "yyyy年M月", { locale: ja }),
-                            }}
                             classNames={{
                                 // Header
                                 caption: "flex justify-center pt-0 relative items-center mb-2",
