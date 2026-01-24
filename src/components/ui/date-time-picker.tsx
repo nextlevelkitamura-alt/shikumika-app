@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import dynamic from "next/dynamic"
 import { Calendar as CalendarIcon, ChevronDown, ChevronUp } from "lucide-react"
 import { format } from "date-fns"
 import { ja } from "date-fns/locale"
@@ -14,19 +13,7 @@ import {
     PopoverTrigger,
 } from "@/components/ui/popover"
 import { ScrollArea } from "@/components/ui/scroll-area"
-
-// Calendar を dynamic import（SSR を無効化して Hydration Error を回避）
-const Calendar = dynamic(
-    () => import("@/components/ui/calendar").then((mod) => ({ default: mod.Calendar })),
-    {
-        ssr: false,
-        loading: () => (
-            <div className="w-[280px] h-[280px] flex items-center justify-center text-zinc-500 text-xs">
-                読み込み中...
-            </div>
-        ),
-    }
-)
+import { SimpleCalendar } from "@/components/ui/simple-calendar"
 
 interface DateTimePickerProps {
     date: Date | undefined
@@ -217,63 +204,13 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
                     align="start"
                 >
                     <div className="flex p-4 pb-2">
-                        {/* LEFT: CALENDAR */}
-                        <div className="flex flex-col w-[280px]">
-                            <Calendar
-                            mode="single"
-                            month={currentMonth}
-                            onMonthChange={setCurrentMonth}
+                        {/* LEFT: SIMPLE CALENDAR (react-day-picker 不使用) */}
+                        <SimpleCalendar
                             selected={tempDate}
                             onSelect={handleDateSelect}
-                            locale={ja}
-                            weekStartsOn={0}
-                            showOutsideDays
-                            fixedWeeks
-                            className="p-0"
-                            classNames={{
-                                // Header
-                                caption: "flex justify-center pt-0 relative items-center mb-2",
-                                caption_label: "text-xl font-bold text-zinc-100",
-                                nav: "space-x-1 flex items-center",
-                                nav_button: cn(
-                                    buttonVariants({ variant: "ghost" }),
-                                    "h-8 w-8 bg-transparent p-0 text-zinc-500 hover:text-white hover:bg-zinc-800/60"
-                                ),
-                                nav_button_previous: "absolute left-0",
-                                nav_button_next: "absolute right-0",
-
-                                // Table (Step A)
-                                table: "w-full border-collapse table-fixed",
-                                head_row: "table-row",
-                                head_cell:
-                                    "p-0 pb-2 text-center text-xs font-medium text-zinc-500",
-                                row: "table-row",
-                                cell: "p-0 text-center align-middle",
-
-                                // Day
-                                day: cn(
-                                    buttonVariants({ variant: "ghost" }),
-                                    "w-full aspect-square p-0 font-normal text-zinc-200 hover:bg-white/5 aria-selected:opacity-100"
-                                ),
-
-                                // States
-                                day_selected:
-                                    "bg-sky-500/20 text-white font-semibold rounded-md shadow-[0_0_0_1px_rgba(56,189,248,0.35),0_0_18px_rgba(56,189,248,0.22)]",
-                                day_today:
-                                    "relative text-white after:content-[''] after:absolute after:inset-1 after:rounded-md after:ring-1 after:ring-sky-300/45",
-                                // outside days: visible but muted + non-interactive
-                                day_outside:
-                                    "text-zinc-600/70 opacity-70 pointer-events-none",
-                                day_disabled: "text-zinc-700 opacity-50",
-                                day_hidden: "invisible",
-
-                                // Reduce default spacing from Calendar wrapper
-                                month: "space-y-1",
-                                months: "space-y-0",
-                                tbody: "w-full",
-                            }}
+                            month={currentMonth}
+                            onMonthChange={setCurrentMonth}
                         />
-                    </div>
 
                     {/* RIGHT: TIME WHEEL */}
                     <TimeWheel selectedDate={tempDate} onTimeChange={handleTimeChange} />
