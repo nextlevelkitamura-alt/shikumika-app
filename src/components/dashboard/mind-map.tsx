@@ -788,6 +788,7 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
     const [dropTargetNodeId, setDropTargetNodeId] = useState<string | null>(null);
     const [dragPositions, setDragPositions] = useState<Record<string, { x: number; y: number }>>({});
     const lastUserActionAtRef = useRef<number>(0);
+    const selectedNodeIdRef = useRef<string | null>(null);
     const markUserAction = useCallback(() => {
         lastUserActionAtRef.current = Date.now();
     }, []);
@@ -799,6 +800,10 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
         setSelectedNodeIds(ids);
         setSelectedNodeId(primaryId);
     }, [markUserAction]);
+
+    useEffect(() => {
+        selectedNodeIdRef.current = selectedNodeId;
+    }, [selectedNodeId]);
 
     // REF: Flag to indicate we're waiting for a new node
     const isCreatingNodeRef = useRef(false);
@@ -893,6 +898,13 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
 
         const timer = setInterval(() => {
             const elapsed = Date.now() - startTime;
+            const currentSelected = selectedNodeIdRef.current;
+            if (currentSelected && currentSelected !== targetId) {
+                clearInterval(timer);
+                activeTimerRef.current = null;
+                focusQueueRef.current = null;
+                return;
+            }
 
             // Strategy 1: React Flow standard selector
             let nodeElement = document.querySelector(`.react-flow__node[data-id="${targetId}"]`);
@@ -956,7 +968,7 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
                 console.log('[MindMap] New task detected, starting DOM polling focus:', newestTask.id);
                 // Queue for focus and start polling
                 focusQueueRef.current = newestTask.id;
-                setSelectedNodeId(newestTask.id);
+                applySelection(new Set([newestTask.id]), newestTask.id, 'user');
                 setPendingEditNodeId(newestTask.id);
 
                 // Start DOM polling for focus (V2)
@@ -969,7 +981,7 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
 
         // Update prev count
         prevTaskCountRef.current = currentCount;
-    }, [tasks, focusNodeWithPollingV2]);
+    }, [tasks, focusNodeWithPollingV2, applySelection]);
 
     // EFFECT: Detect new group creation and focus
     useEffect(() => {
@@ -985,8 +997,7 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
             }, null as TaskGroup | null);
 
             if (newestGroup?.id) {
-                setSelectedNodeId(newestGroup.id);
-                setSelectedNodeIds(new Set([newestGroup.id]));
+                applySelection(new Set([newestGroup.id]), newestGroup.id, 'user');
                 focusNodeWithPollingV2(newestGroup.id, 300, false);
             }
 
@@ -994,7 +1005,7 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
         }
 
         prevGroupCountRef.current = currentCount;
-    }, [groups, focusNodeWithPollingV2]);
+    }, [groups, focusNodeWithPollingV2, applySelection]);
 
     // EFFECT: Backup focus trigger when pendingEditNodeId changes
     useEffect(() => {
@@ -1145,10 +1156,10 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
             console.log('[MindMap] Child task created:', newTask.id, 'Focusing immediately (V2)');
             // Direct focus on the explicit ID
             focusNodeWithPollingV2(newTask.id);
-            setSelectedNodeId(newTask.id);
+            applySelection(new Set([newTask.id]), newTask.id, 'user');
             setPendingEditNodeId(newTask.id);
         }
-    }, [getTaskById, getGroupForTask, onCreateTask, focusNodeWithPollingV2]);
+    }, [getTaskById, getGroupForTask, onCreateTask, focusNodeWithPollingV2, applySelection]);
 
     // Add sibling task
     const addSiblingTask = useCallback(async (taskId: string) => {
@@ -1175,10 +1186,10 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
             console.log('[MindMap] Sibling task created:', newTask.id, 'Focusing immediately (V2)');
             // Direct focus on the explicit ID - fixes "focus reverting to old task" bug
             focusNodeWithPollingV2(newTask.id);
-            setSelectedNodeId(newTask.id);
+            applySelection(new Set([newTask.id]), newTask.id, 'user');
             setPendingEditNodeId(newTask.id);
         }
-    }, [getTaskById, getGroupForTask, onCreateTask, focusNodeWithPollingV2]);
+    }, [getTaskById, getGroupForTask, onCreateTask, focusNodeWithPollingV2, applySelection]);
 
     // Delete task
     const deleteTask = useCallback(async (taskId: string) => {
@@ -1192,14 +1203,13 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
 
         const nextFocusId = calculateNextFocus(taskId);
         await onDeleteTask(taskId);
-        setSelectedNodeId(nextFocusId);
-        setSelectedNodeIds(nextFocusId ? new Set([nextFocusId]) : new Set());
+        applySelection(nextFocusId ? new Set([nextFocusId]) : new Set(), nextFocusId, 'user');
         if (nextFocusId) {
             requestAnimationFrame(() => {
                 focusNodeWithPollingV2(nextFocusId, 300, false);
             });
         }
-    }, [hasChildren, calculateNextFocus, onDeleteTask]);
+    }, [hasChildren, calculateNextFocus, onDeleteTask, applySelection]);
 
     // Navigation helpers for arrow keys
     const navigateToSibling = useCallback((taskId: string, direction: 'up' | 'down'): string | null => {
@@ -1249,7 +1259,7 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
         }
 
         if (targetId) {
-            setSelectedNodeId(targetId);
+            applySelection(new Set([targetId]), targetId, 'user');
             // Focus the target node's wrapper using multiple selector strategies
             requestAnimationFrame(() => {
                 // Try React Flow standard selector first
@@ -1267,7 +1277,7 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
                 }
             });
         }
-    }, [navigateToSibling, navigateToParent, navigateToFirstChild]);
+    }, [navigateToSibling, navigateToParent, navigateToFirstChild, applySelection]);
 
     // Save task title
     const saveTaskTitle = useCallback(async (taskId: string, newTitle: string) => {
@@ -1625,8 +1635,7 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
                 }
             }
 
-            setSelectedNodeId(null);
-            setSelectedNodeIds(new Set());
+            applySelection(new Set(), null, 'user');
             return;
         }
 
