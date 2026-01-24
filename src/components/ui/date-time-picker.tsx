@@ -21,7 +21,7 @@ interface DateTimePickerProps {
     trigger?: React.ReactNode
 }
 
-// Wheel-style Time Picker Component (Maintained)
+// Wheel-style Time Picker Component
 function TimeWheel({
     selectedDate,
     onTimeChange
@@ -129,6 +129,9 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
         setCurrentMonth(newMonth)
     }
 
+    // Manual Weekday Header (Monday Start)
+    const weekdays = ["月", "火", "水", "木", "金", "土", "日"];
+
     return (
         <Popover open={isOpen} onOpenChange={setIsOpen}>
             <PopoverTrigger asChild>
@@ -164,7 +167,16 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
                             </div>
                         </div>
 
-                        {/* 2. Calendar with GRID LAYOUT */}
+                        {/* 2. Manual Weekday Header (Monday Start) */}
+                        <div className="grid grid-cols-7 mb-1 text-center">
+                            {weekdays.map((day) => (
+                                <div key={day} className="text-[0.8rem] text-muted-foreground font-normal py-1">
+                                    {day}
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* 3. Calendar with GRID LAYOUT & Offset */}
                         <Calendar
                             mode="single"
                             month={currentMonth}
@@ -172,7 +184,8 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
                             selected={selectedDate}
                             onSelect={handleDateSelect}
                             locale={ja}
-                            showOutsideDays={true} // Enable to ensure grid structure (offset), hidden via CSS
+                            weekStartsOn={1} // Monday start
+                            showOutsideDays={true} // Enable offset cells
                             fixedWeeks
                             className="p-0 border rounded-md p-1"
                             classNames={{
@@ -180,9 +193,7 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
                                 nav: "hidden",
                                 month: "space-y-0",
                                 table: "w-full border-collapse",
-                                // LAYOUT FIX: Enforce strict 7-column grid
-                                head_row: "grid grid-cols-7 mb-1",
-                                head_cell: "text-muted-foreground w-full font-normal text-[0.8rem] text-center py-1",
+                                head_row: "hidden", // Hide actual header, use manual one above
                                 row: "grid grid-cols-7 mt-0 w-full",
                                 cell: "relative p-0 text-center text-sm focus-within:relative focus-within:z-20 aspect-square flex items-center justify-center",
                                 day: cn(
