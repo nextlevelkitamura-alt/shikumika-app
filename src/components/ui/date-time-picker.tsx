@@ -110,7 +110,7 @@ function TimeWheel({
                 <div className="flex h-full">
                     {/* Hours */}
                     <ScrollArea className="h-full flex-1">
-                        <div className="flex flex-col items-center py-14 space-y-1">
+                        <div className="flex flex-col items-center py-[120px] space-y-1">
                             {hours.map((h) => {
                                 const isSelected = selectedDate?.getHours() === h
                                 return (
@@ -137,7 +137,7 @@ function TimeWheel({
 
                     {/* Minutes */}
                     <ScrollArea className="h-full flex-1">
-                        <div className="flex flex-col items-center py-14 space-y-1">
+                        <div className="flex flex-col items-center py-[120px] space-y-1">
                             {minutes.map((m, index) => {
                                 const currentMin = selectedDate?.getMinutes() ?? 0
                                 const isSelected = currentMin === m
