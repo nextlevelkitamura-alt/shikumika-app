@@ -116,7 +116,7 @@ function TimeWheel({
                                 return (
                                     <button
                                         key={h}
-                                        ref={(el) => (hourRefs.current[h] = el)}
+                                        ref={(el) => { hourRefs.current[h] = el }}
                                         type="button"
                                         className={cn(
                                             "w-8 h-8 rounded-md text-xs flex items-center justify-center transition-colors font-medium",
@@ -144,7 +144,7 @@ function TimeWheel({
                                 return (
                                     <button
                                         key={m}
-                                        ref={(el) => (minuteRefs.current[index] = el)}
+                                        ref={(el) => { minuteRefs.current[index] = el }}
                                         type="button"
                                         className={cn(
                                             "w-8 h-8 rounded-md text-xs flex items-center justify-center transition-colors font-medium",
