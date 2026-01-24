@@ -188,21 +188,16 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
                             showOutsideDays={false} // Match ideal image (empty black cells)
                             fixedWeeks
                             className="p-0 border-l border-zinc-800"
-                            classNames={{
-                                caption: "hidden",
-                                nav: "hidden",
-                                month: "space-y-0",
-                                // Use standard table layout for perfect borders
-                                table: "w-full border-collapse",
-                                head_row: "hidden", // We observe the manual header above
-                                row: "flex w-full mt-0", // react-day-picker v8 uses flex rows by default, we force display:table-row equivalent via parent?
-                                // Actually, react-day-picker renders a table. If we remove 'flex' from 'row', it behaves like a TR.
-                                // Let's clear the 'row' class to let it be a natural TR.
-                                // BUT, shadcn/ui calendar usually forces 'flex'.
-                                // We will force TABLE styling here.
-                                tbody: "block w-full", // Wait, for border-collapse to work on cells, we need TABLE display.
-                                // Let's try STRICT TABLE override.
-                            }}
+                            // Use standard table layout for perfect borders
+                            // table: "w-full border-collapse",
+                            // head_row: "hidden", // We observe the manual header above
+                            // row: "flex w-full mt-0", // react-day-picker v8 uses flex rows by default, we force display:table-row equivalent via parent?
+                            // Actually, react-day-picker renders a table. If we remove 'flex' from 'row', it behaves like a TR.
+                            // Let's clear the 'row' class to let it be a natural TR.
+                            // BUT, shadcn/ui calendar usually forces 'flex'.
+                            // We will force TABLE styling here.
+                            // tbody: "block w-full", // Wait, for border-collapse to work on cells, we need TABLE display.
+                            // Let's try STRICT TABLE override.
                             // Overriding shadcn styles requires deep class targeting or structural reset.
                             // Better approach for "Grid Lines": Treat rows as Grid or Flex with borders.
                             // Let's use the Grid approach which allows borders on cells easily.
