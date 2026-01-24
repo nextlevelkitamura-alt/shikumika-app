@@ -34,6 +34,49 @@ function TimeWheel({
 }) {
     const hours = Array.from({ length: 24 }, (_, i) => i)
     const minutes = Array.from({ length: 12 }, (_, i) => i * 5)
+    
+    // Refs for scrolling to selected time
+    const hourRefs = React.useRef<(HTMLButtonElement | null)[]>([])
+    const minuteRefs = React.useRef<(HTMLButtonElement | null)[]>([])
+    const isInitialMount = React.useRef(true)
+
+    // Scroll to center when time changes
+    const scrollToCenter = (element: HTMLButtonElement | null, smooth: boolean = true) => {
+        if (!element) return
+        element.scrollIntoView({
+            behavior: smooth ? 'smooth' : 'auto',
+            block: 'center',
+            inline: 'center'
+        })
+    }
+
+    // Initial scroll on mount or when selectedDate changes
+    React.useEffect(() => {
+        if (selectedDate && isInitialMount.current) {
+            // Wait for the next tick to ensure DOM is ready
+            setTimeout(() => {
+                const hour = selectedDate.getHours()
+                const minute = selectedDate.getMinutes()
+                const minuteIndex = Math.floor(minute / 5)
+                
+                scrollToCenter(hourRefs.current[hour], false)
+                scrollToCenter(minuteRefs.current[minuteIndex], false)
+            }, 50)
+            isInitialMount.current = false
+        }
+    }, [selectedDate])
+
+    const handleTimeChange = (type: "hour" | "minute", value: number) => {
+        onTimeChange(type, value)
+        
+        // Scroll to selected time with smooth animation
+        if (type === "hour") {
+            scrollToCenter(hourRefs.current[value], true)
+        } else {
+            const minuteIndex = value / 5
+            scrollToCenter(minuteRefs.current[minuteIndex], true)
+        }
+    }
 
     return (
         <div className="flex flex-col w-[90px] shrink-0 border-l border-zinc-800/80 pl-2 ml-3">
@@ -73,6 +116,7 @@ function TimeWheel({
                                 return (
                                     <button
                                         key={h}
+                                        ref={(el) => (hourRefs.current[h] = el)}
                                         type="button"
                                         className={cn(
                                             "w-8 h-8 rounded-md text-xs flex items-center justify-center transition-colors font-medium",
@@ -80,7 +124,7 @@ function TimeWheel({
                                                 ? "text-white"
                                                 : "text-zinc-500 hover:text-zinc-200"
                                         )}
-                                        onClick={() => onTimeChange("hour", h)}
+                                        onClick={() => handleTimeChange("hour", h)}
                                     >
                                         {h.toString().padStart(2, "0")}
                                     </button>
@@ -94,12 +138,13 @@ function TimeWheel({
                     {/* Minutes */}
                     <ScrollArea className="h-full flex-1">
                         <div className="flex flex-col items-center py-14 space-y-1">
-                            {minutes.map((m) => {
+                            {minutes.map((m, index) => {
                                 const currentMin = selectedDate?.getMinutes() ?? 0
                                 const isSelected = currentMin === m
                                 return (
                                     <button
                                         key={m}
+                                        ref={(el) => (minuteRefs.current[index] = el)}
                                         type="button"
                                         className={cn(
                                             "w-8 h-8 rounded-md text-xs flex items-center justify-center transition-colors font-medium",
@@ -107,7 +152,7 @@ function TimeWheel({
                                                 ? "text-white"
                                                 : "text-zinc-500 hover:text-zinc-200"
                                         )}
-                                        onClick={() => onTimeChange("minute", m)}
+                                        onClick={() => handleTimeChange("minute", m)}
                                     >
                                         {m.toString().padStart(2, "0")}
                                     </button>

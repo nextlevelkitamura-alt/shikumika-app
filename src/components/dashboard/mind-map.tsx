@@ -762,52 +762,46 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
 
             {/* DateTime Info Group */}
             <div className="nodrag nopan flex items-center gap-1 shrink-0 ml-1">
-                {data?.scheduled_at ? (
-                    <>
-                        {/* Date Text */}
-                        <span className="text-[10px] text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer">
-                            {new Date(data.scheduled_at).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                        
-                        {/* Clear Button */}
-                        <button
-                            className="p-0.5 rounded text-zinc-500 hover:text-red-400 transition-colors"
-                            onClick={(e) => {
-                                e.stopPropagation()
-                                data?.onUpdateDate?.(null)
-                            }}
-                            title="日時設定を削除"
-                        >
-                            <X className="w-2.5 h-2.5" />
-                        </button>
-                        
-                        {/* Calendar Icon */}
-                        <DateTimePicker
-                            date={new Date(data.scheduled_at)}
-                            setDate={(date) => data?.onUpdateDate?.(date ? date.toISOString() : null)}
-                            trigger={
+                <DateTimePicker
+                    date={data?.scheduled_at ? new Date(data.scheduled_at) : undefined}
+                    setDate={(date) => data?.onUpdateDate?.(date ? date.toISOString() : null)}
+                    trigger={
+                        data?.scheduled_at ? (
+                            <div className="flex items-center gap-1">
+                                {/* Date Text (clickable) */}
+                                <span className="text-[10px] text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer">
+                                    {new Date(data.scheduled_at).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                                
+                                {/* Clear Button */}
+                                <button
+                                    className="p-0.5 rounded text-zinc-500 hover:text-red-400 transition-colors"
+                                    onClick={(e) => {
+                                        e.stopPropagation()
+                                        data?.onUpdateDate?.(null)
+                                    }}
+                                    title="日時設定を削除"
+                                >
+                                    <X className="w-2.5 h-2.5" />
+                                </button>
+                                
+                                {/* Calendar Icon */}
                                 <button className="p-0.5 rounded text-sky-400 hover:text-sky-300 transition-colors"
                                     title="日時設定"
                                 >
                                     <CalendarIcon className="w-3 h-3" />
                                 </button>
-                            }
-                        />
-                    </>
-                ) : (
-                    /* Date not set: Calendar icon only */
-                    <DateTimePicker
-                        date={undefined}
-                        setDate={(date) => data?.onUpdateDate?.(date ? date.toISOString() : null)}
-                        trigger={
+                            </div>
+                        ) : (
+                            /* Date not set: Calendar icon only */
                             <button className="p-0.5 rounded text-zinc-500 hover:text-zinc-400 transition-colors"
                                 title="日時設定"
                             >
                                 <CalendarIcon className="w-3 h-3" />
                             </button>
-                        }
-                    />
-                )}
+                        )
+                    }
+                />
             </div>
 
             <Handle type="source" position={Position.Right} className="!bg-muted-foreground/50 !w-1 !h-1" />

@@ -252,32 +252,32 @@ function TaskItem({
 
                     {/* Group 2: Date Info */}
                     <div className="flex items-center gap-1">
-                        {task.scheduled_at ? (
-                            <>
-                                {/* Date Text (clickable) */}
-                                <span className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer">
-                                    {new Date(task.scheduled_at).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                                </span>
-                                
-                                {/* Clear Button */}
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-4 w-4 text-zinc-500 hover:text-red-400 transition-colors"
-                                    onClick={(e) => {
-                                        e.stopPropagation()
-                                        onUpdateTask?.(task.id, { scheduled_at: null })
-                                    }}
-                                    title="日時設定を削除"
-                                >
-                                    <X className="w-3 h-3" />
-                                </Button>
-                                
-                                {/* Calendar Icon */}
-                                <DateTimePicker
-                                    date={new Date(task.scheduled_at)}
-                                    setDate={(date) => onUpdateTask?.(task.id, { scheduled_at: date ? date.toISOString() : null })}
-                                    trigger={
+                        <DateTimePicker
+                            date={task.scheduled_at ? new Date(task.scheduled_at) : undefined}
+                            setDate={(date) => onUpdateTask?.(task.id, { scheduled_at: date ? date.toISOString() : null })}
+                            trigger={
+                                task.scheduled_at ? (
+                                    <div className="flex items-center gap-1">
+                                        {/* Date Text (clickable) */}
+                                        <span className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer">
+                                            {new Date(task.scheduled_at).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                        </span>
+                                        
+                                        {/* Clear Button */}
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-4 w-4 text-zinc-500 hover:text-red-400 transition-colors"
+                                            onClick={(e) => {
+                                                e.stopPropagation()
+                                                onUpdateTask?.(task.id, { scheduled_at: null })
+                                            }}
+                                            title="日時設定を削除"
+                                        >
+                                            <X className="w-3 h-3" />
+                                        </Button>
+                                        
+                                        {/* Calendar Icon */}
                                         <Button
                                             variant="ghost"
                                             size="icon"
@@ -286,15 +286,9 @@ function TaskItem({
                                         >
                                             <CalendarIcon className="w-4 h-4" />
                                         </Button>
-                                    }
-                                />
-                            </>
-                        ) : (
-                            /* Date not set: Calendar icon only */
-                            <DateTimePicker
-                                date={undefined}
-                                setDate={(date) => onUpdateTask?.(task.id, { scheduled_at: date ? date.toISOString() : null })}
-                                trigger={
+                                    </div>
+                                ) : (
+                                    /* Date not set: Calendar icon only */
                                     <Button
                                         variant="ghost"
                                         size="icon"
@@ -303,9 +297,9 @@ function TaskItem({
                                     >
                                         <CalendarIcon className="w-4 h-4" />
                                     </Button>
-                                }
-                            />
-                        )}
+                                )
+                            }
+                        />
                     </div>
 
                     {/* Group 3: Other Actions (Hover) */}
