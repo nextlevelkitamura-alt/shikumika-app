@@ -19,6 +19,8 @@ import 'reactflow/dist/style.css';
 import dagre from 'dagre';
 import { Database } from "@/types/database";
 import { cn } from "@/lib/utils";
+import { DateTimePicker } from "@/components/ui/date-time-picker";
+import { Calendar as CalendarIcon } from "lucide-react";
 
 type TaskGroup = Database['public']['Tables']['task_groups']['Row']
 type Project = Database['public']['Tables']['projects']['Row']
@@ -749,6 +751,24 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
                 )}
             />
 
+            {/* DateTime Picker Trigger */}
+            <div className="nodrag nopan flex items-center shrink-0 ml-1">
+                <DateTimePicker
+                    date={data?.scheduled_at ? new Date(data.scheduled_at) : undefined}
+                    setDate={(date) => data?.onUpdateDate?.(date ? date.toISOString() : null)}
+                    trigger={
+                        <button className={cn(
+                            "p-0.5 rounded hover:bg-muted text-muted-foreground transition-colors",
+                            data?.scheduled_at && "text-primary bg-primary/10"
+                        )}
+                            title={data?.scheduled_at ? new Date(data.scheduled_at).toLocaleString() : "日時設定"}
+                        >
+                            <CalendarIcon className="w-3 h-3" />
+                        </button>
+                    }
+                />
+            </div>
+
             <Handle type="source" position={Position.Right} className="!bg-muted-foreground/50 !w-1 !h-1" />
         </div>
     );
@@ -784,7 +804,8 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
         group_id: t?.group_id,
         parent_task_id: t?.parent_task_id,
         order_index: t?.order_index,
-        created_at: t?.created_at
+        created_at: t?.created_at,
+        scheduled_at: t?.scheduled_at // Include scheduled_at
     })) ?? []);
 
     // STATE
@@ -1294,6 +1315,13 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
         }
     }, [onUpdateTask]);
 
+    // Update scheduled_at
+    const updateTaskScheduledAt = useCallback(async (taskId: string, dateStr: string | null) => {
+        if (onUpdateTask) {
+            await onUpdateTask(taskId, { scheduled_at: dateStr });
+        }
+    }, [onUpdateTask]);
+
     // Check if node should trigger edit
     const shouldTriggerEdit = useCallback((taskId: string) => pendingEditNodeId === taskId, [pendingEditNodeId]);
 
@@ -1309,6 +1337,7 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
             const parsedTasks = JSON.parse(tasksJson) as {
                 id: string; title: string; status: string; group_id: string;
                 parent_task_id: string | null; order_index: number; created_at: string;
+                scheduled_at: string | null; // Typed
             }[];
 
             resultNodes.push({
@@ -1381,10 +1410,12 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
                     data: {
                         label: task.title ?? 'Task',
                         status: task.status ?? 'todo',
+                        scheduled_at: task.scheduled_at,
                         isSelected: selectedNodeIds.has(task.id),
                         triggerEdit,
                         initialValue: '',
                         onSave: (t: string) => saveTaskTitle(task.id, t),
+                        onUpdateDate: (d: string | null) => updateTaskScheduledAt(task.id, d),
                         onAddChild: () => addChildTask(task.id),
                         onAddSibling: () => addSiblingTask(task.id),
                         onDelete: () => deleteTask(task.id),

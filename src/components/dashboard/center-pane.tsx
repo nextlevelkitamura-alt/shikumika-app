@@ -2,9 +2,10 @@
 
 import { useState, useRef, useEffect, useCallback } from "react"
 import { Database } from "@/types/database"
+import { DateTimePicker } from "@/components/ui/date-time-picker"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
-import { MoreHorizontal, Play, Check, ChevronRight, ChevronDown, Plus, Trash2, Pause, RotateCcw, Timer, GripVertical } from "lucide-react"
+import { MoreHorizontal, Play, Check, ChevronRight, ChevronDown, Plus, Trash2, Pause, RotateCcw, Timer, GripVertical, Calendar as CalendarIcon } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import { MindMap } from "./mind-map"
@@ -182,6 +183,13 @@ function TaskItem({
                         </span>
                     )}
 
+                    {/* Scheduled Date Display */}
+                    {task.scheduled_at && (
+                        <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded mr-1">
+                            {new Date(task.scheduled_at).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                    )}
+
                     {isTimerRunning ? (
                         /* Running State: Pause / Complete / Interrupt */
                         <>
@@ -240,6 +248,21 @@ function TaskItem({
 
                 {/* Actions (Hover) */}
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <DateTimePicker
+                        date={task.scheduled_at ? new Date(task.scheduled_at) : undefined}
+                        setDate={(date) => onUpdateTask?.(task.id, { scheduled_at: date ? date.toISOString() : null })}
+                        trigger={
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className={cn("h-6 w-6 hover:text-primary", task.scheduled_at ? "text-primary/70" : "text-muted-foreground")}
+                                title="日時設定"
+                            >
+                                <CalendarIcon className="w-3.5 h-3.5" />
+                            </Button>
+                        }
+                    />
+
                     {canAddChildren && (
                         <Button
                             variant="ghost"
