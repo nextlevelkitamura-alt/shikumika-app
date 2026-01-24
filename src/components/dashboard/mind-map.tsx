@@ -849,7 +849,7 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
         order_index: t?.order_index,
         created_at: t?.created_at,
         scheduled_at: t?.scheduled_at,
-        priority: t?.priority ?? 3 // Include priority
+        priority: (t as any)?.priority ?? 3 // Include priority
     })) ?? []);
 
     // STATE
@@ -1461,7 +1461,7 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
                         label: task.title ?? 'Task',
                         status: task.status ?? 'todo',
                         scheduled_at: task.scheduled_at,
-                        priority: task.priority ?? 3,
+                        priority: (task as any).priority ?? 3,
                         isSelected: selectedNodeIds.has(task.id),
                         triggerEdit,
                         initialValue: '',
