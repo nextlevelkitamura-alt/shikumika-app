@@ -774,7 +774,7 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
                             className="p-0.5 rounded text-zinc-500 hover:text-red-400 transition-colors"
                             onClick={(e) => {
                                 e.stopPropagation()
-                                data?.onUpdatePriority?.(null as any)
+                                data?.onUpdatePriority?.(undefined as any)
                             }}
                             title="優先度を削除"
                         >

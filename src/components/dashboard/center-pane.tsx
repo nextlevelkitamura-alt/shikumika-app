@@ -265,7 +265,7 @@ function TaskItem({
                                     className="h-4 w-4 text-zinc-500 hover:text-red-400 transition-colors"
                                     onClick={(e) => {
                                         e.stopPropagation()
-                                        onUpdateTask?.(task.id, { priority: null })
+                                        onUpdateTask?.(task.id, { priority: undefined as any })
                                     }}
                                     title="優先度を削除"
                                 >
