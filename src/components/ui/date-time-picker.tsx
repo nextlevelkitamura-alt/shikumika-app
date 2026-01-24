@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Calendar as CalendarIcon, Clock, ChevronLeft, ChevronRight } from "lucide-react"
+import { Calendar as CalendarIcon, ChevronDown, ChevronUp } from "lucide-react"
 import { format } from "date-fns"
 import { ja } from "date-fns/locale"
 
@@ -23,91 +23,102 @@ interface DateTimePickerProps {
 
 // ----------------------------------------------------------------------
 // Time Wheel Component (Split Hours / Minutes)
+// - Visual goal: iOS-like wheel with center highlight band + chevrons
 // ----------------------------------------------------------------------
 function TimeWheel({
     selectedDate,
-    onTimeChange
+    onTimeChange,
 }: {
-    selectedDate: Date | undefined,
+    selectedDate: Date | undefined
     onTimeChange: (type: "hour" | "minute", value: number) => void
 }) {
-    const hours = Array.from({ length: 24 }, (_, i) => i);
-    // 5-minute increments
-    const minutes = Array.from({ length: 12 }, (_, i) => i * 5);
-
-    // Helper to scroll to selected element (simplified approach: padding ensures center)
-    // For a robust implementation, we might need refs, but for now CSS centering suffices.
+    const hours = Array.from({ length: 24 }, (_, i) => i)
+    const minutes = Array.from({ length: 12 }, (_, i) => i * 5)
 
     return (
-        <div className="flex flex-col h-[280px] w-[90px] shrink-0 border-l border-zinc-800 ml-2 pl-2">
-            {/* Header */}
-            <div className="flex items-center justify-around py-2 mb-1 text-[10px] font-medium text-muted-foreground border-b border-zinc-800 select-none">
+        <div className="flex flex-col w-[90px] shrink-0 border-l border-zinc-800/80 pl-2 ml-3">
+            <div className="flex items-center justify-around py-2 text-[10px] font-medium text-zinc-400 border-b border-zinc-800/80 select-none">
                 <span>時</span>
                 <span>分</span>
             </div>
 
-            {/* Scrollable Area */}
-            <div className="flex flex-1 relative h-full overflow-hidden">
-                {/* Hours Column */}
-                <ScrollArea className="h-full flex-1">
-                    <div className="flex flex-col items-center py-24 space-y-1">
-                        {hours.map((h) => {
-                            const isSelected = selectedDate?.getHours() === h;
-                            return (
-                                <button
-                                    key={h}
-                                    type="button"
-                                    className={cn(
-                                        "w-8 h-7 rounded-md text-xs flex items-center justify-center transition-all shrink-0 font-medium",
-                                        isSelected
-                                            ? "bg-zinc-800 text-white font-bold shadow-sm"
-                                            : "text-zinc-500 hover:text-white hover:bg-zinc-800/50"
-                                    )}
-                                    onClick={() => onTimeChange("hour", h)}
-                                >
-                                    {h.toString().padStart(2, '0')}
-                                </button>
-                            );
-                        })}
-                    </div>
-                </ScrollArea>
+            <div className="relative h-[240px] overflow-hidden">
+                {/* Top chevrons */}
+                <div className="absolute top-2 left-0 right-0 flex justify-around pointer-events-none text-zinc-500/70">
+                    <ChevronUp className="h-4 w-4" />
+                    <ChevronUp className="h-4 w-4" />
+                </div>
 
-                {/* Separator Line (Visual) */}
-                <div className="w-[1px] h-full bg-zinc-800/50 mx-0.5" />
+                {/* Bottom chevrons */}
+                <div className="absolute bottom-2 left-0 right-0 flex justify-around pointer-events-none text-zinc-500/70">
+                    <ChevronDown className="h-4 w-4" />
+                    <ChevronDown className="h-4 w-4" />
+                </div>
 
-                {/* Minutes Column */}
-                <ScrollArea className="h-full flex-1">
-                    <div className="flex flex-col items-center py-24 space-y-1">
-                        {minutes.map((m) => {
-                            const currentMin = selectedDate?.getMinutes() || 0;
-                            // Check if selected minute matches (handling exact match for 5-min steps)
-                            const isSelected = currentMin === m;
+                {/* Center highlight band (across both columns) */}
+                <div
+                    className="absolute top-1/2 left-0 right-0 -translate-y-1/2 h-9 rounded-lg pointer-events-none bg-sky-500/15 ring-1 ring-sky-400/25 shadow-[0_0_18px_rgba(56,189,248,0.22)]"
+                />
 
-                            return (
-                                <button
-                                    key={m}
-                                    type="button"
-                                    className={cn(
-                                        "w-8 h-7 rounded-md text-xs flex items-center justify-center transition-all shrink-0 font-medium",
-                                        isSelected
-                                            ? "bg-zinc-800 text-white font-bold shadow-sm"
-                                            : "text-zinc-500 hover:text-white hover:bg-zinc-800/50"
-                                    )}
-                                    // Handle minute change
-                                    onClick={() => onTimeChange("minute", m)}
-                                >
-                                    {m.toString().padStart(2, '0')}
-                                </button>
-                            );
-                        })}
-                    </div>
-                </ScrollArea>
+                {/* Top/Bottom fade (wheel feel) */}
+                <div className="absolute inset-x-0 top-0 h-12 bg-gradient-to-b from-[#18181b] to-transparent pointer-events-none" />
+                <div className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-[#18181b] to-transparent pointer-events-none" />
 
-                {/* Center Highlight Overlay (Optional visual cue) */}
-                <div className="absolute top-1/2 left-0 right-0 -translate-y-1/2 h-7 bg-zinc-800/10 pointer-events-none rounded sm:hidden" />
+                <div className="flex h-full">
+                    {/* Hours */}
+                    <ScrollArea className="h-full flex-1">
+                        <div className="flex flex-col items-center py-14 space-y-1">
+                            {hours.map((h) => {
+                                const isSelected = selectedDate?.getHours() === h
+                                return (
+                                    <button
+                                        key={h}
+                                        type="button"
+                                        className={cn(
+                                            "w-8 h-8 rounded-md text-xs flex items-center justify-center transition-colors font-medium",
+                                            isSelected
+                                                ? "text-white"
+                                                : "text-zinc-500 hover:text-zinc-200"
+                                        )}
+                                        onClick={() => onTimeChange("hour", h)}
+                                    >
+                                        {h.toString().padStart(2, "0")}
+                                    </button>
+                                )
+                            })}
+                        </div>
+                    </ScrollArea>
+
+                    <div className="w-px bg-zinc-800/60 mx-1" />
+
+                    {/* Minutes */}
+                    <ScrollArea className="h-full flex-1">
+                        <div className="flex flex-col items-center py-14 space-y-1">
+                            {minutes.map((m) => {
+                                const currentMin = selectedDate?.getMinutes() ?? 0
+                                const isSelected = currentMin === m
+                                return (
+                                    <button
+                                        key={m}
+                                        type="button"
+                                        className={cn(
+                                            "w-8 h-8 rounded-md text-xs flex items-center justify-center transition-colors font-medium",
+                                            isSelected
+                                                ? "text-white"
+                                                : "text-zinc-500 hover:text-zinc-200"
+                                        )}
+                                        onClick={() => onTimeChange("minute", m)}
+                                    >
+                                        {m.toString().padStart(2, "0")}
+                                    </button>
+                                )
+                            })}
+                        </div>
+                    </ScrollArea>
+                </div>
             </div>
         </div>
-    );
+    )
 }
 
 // ----------------------------------------------------------------------
@@ -115,15 +126,9 @@ function TimeWheel({
 // ----------------------------------------------------------------------
 export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) {
     const [isOpen, setIsOpen] = React.useState(false)
-
-    // Internal state for calendar navigation (Month view)
     const [currentMonth, setCurrentMonth] = React.useState<Date>(new Date())
-
-    // Internal temporary state for "Set" / "Cancel" logic
-    // We only commit to `setDate` (parent) when "Set" is clicked.
     const [tempDate, setTempDate] = React.useState<Date | undefined>(date)
 
-    // Sync external date to internal state when opening
     React.useEffect(() => {
         if (isOpen) {
             setTempDate(date || new Date())
@@ -131,11 +136,8 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
         }
     }, [isOpen, date])
 
-    // Handlers
     const handleDateSelect = (newDate: Date | undefined) => {
         if (!newDate) return
-
-        // Preserve current time from tempDate
         const current = tempDate || new Date()
         newDate.setHours(current.getHours())
         newDate.setMinutes(current.getMinutes())
@@ -144,15 +146,11 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
 
     const handleTimeChange = (type: "hour" | "minute", value: number) => {
         const newDate = tempDate ? new Date(tempDate) : new Date()
-        if (type === "hour") {
-            newDate.setHours(value)
-        } else {
-            newDate.setMinutes(value)
-        }
+        if (type === "hour") newDate.setHours(value)
+        else newDate.setMinutes(value)
         setTempDate(newDate)
     }
 
-    // Commit changes
     const onConfirm = () => {
         setDate(tempDate)
         setIsOpen(false)
@@ -170,17 +168,22 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
                         )}
                     >
                         <CalendarIcon className="mr-2 h-4 w-4" />
-                        {date ? format(date, "yyyy年 M月 d日 HH:mm", { locale: ja }) : <span>日時を選択</span>}
+                        {date ? (
+                            format(date, "yyyy年 M月 d日 HH:mm", { locale: ja })
+                        ) : (
+                            <span>日時を選択</span>
+                        )}
                     </Button>
                 )}
             </PopoverTrigger>
+
             <PopoverContent
                 className="w-auto p-0 border border-zinc-800 bg-[#18181b] shadow-2xl rounded-xl overflow-hidden"
                 align="start"
             >
                 <div className="flex p-4 pb-2">
                     {/* LEFT: CALENDAR */}
-                    <div className="flex flex-col">
+                    <div className="flex flex-col w-[280px]">
                         <Calendar
                             mode="single"
                             month={currentMonth}
@@ -188,39 +191,54 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
                             selected={tempDate}
                             onSelect={handleDateSelect}
                             locale={ja}
-                            weekStartsOn={1} // Monday start (if desired, usually 0/1 depending on preference. Keeping 1 for consistency with '月' start request)
-                            showOutsideDays={false}
+                            weekStartsOn={0}
+                            showOutsideDays
                             fixedWeeks
                             className="p-0"
+                            formatters={{
+                                formatCaption: (m) => format(m, "yyyy年M月", { locale: ja }),
+                            }}
                             classNames={{
-                                months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
-                                month: "space-y-4",
-                                caption: "flex justify-center pt-1 relative items-center mb-2",
-                                caption_label: "text-base font-bold text-zinc-100",
+                                // Header
+                                caption: "flex justify-center pt-0 relative items-center mb-2",
+                                caption_label: "text-xl font-bold text-zinc-100",
                                 nav: "space-x-1 flex items-center",
                                 nav_button: cn(
                                     buttonVariants({ variant: "ghost" }),
-                                    "h-7 w-7 bg-transparent p-0 text-zinc-400 hover:text-white hover:bg-zinc-800"
+                                    "h-8 w-8 bg-transparent p-0 text-zinc-500 hover:text-white hover:bg-zinc-800/60"
                                 ),
-                                nav_button_previous: "absolute left-1",
-                                nav_button_next: "absolute right-1",
-                                // Table Layout: FIXED for perfect alignment
-                                table: "w-full border-collapse space-y-1 table-fixed",
-                                head_row: "table-row mb-2",
-                                head_cell: "text-zinc-500 rounded-md w-9 font-normal text-[0.8rem] text-center align-middle h-8",
-                                row: "table-row w-full mt-2",
-                                cell: "h-9 w-9 text-center text-sm p-0 relative [&:has([aria-selected].day-range-end)]:rounded-r-md [&:has([aria-selected].day-outside)]:bg-accent/50 [&:has([aria-selected])]:bg-accent first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20 align-middle",
-                                // Removed fixed width from 'day' to let table-fixed handle distribution
+                                nav_button_previous: "absolute left-0",
+                                nav_button_next: "absolute right-0",
+
+                                // Table (Step A)
+                                table: "w-full border-collapse table-fixed",
+                                head_row: "table-row",
+                                head_cell:
+                                    "p-0 pb-2 text-center text-xs font-medium text-zinc-500",
+                                row: "table-row",
+                                cell: "p-0 text-center align-middle",
+
+                                // Day
                                 day: cn(
                                     buttonVariants({ variant: "ghost" }),
-                                    "h-9 w-full p-0 font-normal aria-selected:opacity-100 text-zinc-300 hover:bg-zinc-800 hover:text-white mx-auto aspect-square"
+                                    "w-full aspect-square p-0 font-normal text-zinc-200 hover:bg-white/5 aria-selected:opacity-100"
                                 ),
-                                day_range_end: "day-range-end",
-                                day_selected: "bg-zinc-100 text-zinc-900 hover:bg-zinc-100 hover:text-zinc-900 focus:bg-zinc-100 focus:text-zinc-900 font-bold rounded-md",
-                                day_today: "bg-zinc-800 text-zinc-50 accent-zinc-500",
-                                day_outside: "text-zinc-800 opacity-50",
-                                day_disabled: "text-zinc-800 opacity-50",
+
+                                // States
+                                day_selected:
+                                    "bg-sky-500/20 text-white font-semibold rounded-md shadow-[0_0_0_1px_rgba(56,189,248,0.35),0_0_18px_rgba(56,189,248,0.22)]",
+                                day_today:
+                                    "relative text-white after:content-[''] after:absolute after:inset-1 after:rounded-md after:ring-1 after:ring-sky-300/45",
+                                // outside days: visible but muted + non-interactive
+                                day_outside:
+                                    "text-zinc-600/70 opacity-70 pointer-events-none",
+                                day_disabled: "text-zinc-700 opacity-50",
                                 day_hidden: "invisible",
+
+                                // Reduce default spacing from Calendar wrapper
+                                month: "space-y-1",
+                                months: "space-y-0",
+                                tbody: "w-full",
                             }}
                         />
                     </div>
@@ -229,11 +247,11 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
                     <TimeWheel selectedDate={tempDate} onTimeChange={handleTimeChange} />
                 </div>
 
-                {/* FOOTER: Action Buttons */}
-                <div className="flex items-center justify-between border-t border-zinc-800 bg-[#18181b] p-2">
+                {/* FOOTER */}
+                <div className="flex items-center justify-between border-t border-zinc-800 bg-[#18181b] px-3 py-2">
                     <Button
                         variant="ghost"
-                        className="text-xs text-zinc-400 hover:text-white h-8 px-4"
+                        className="text-xs text-zinc-400 hover:text-white h-8 px-3"
                         onClick={() => setIsOpen(false)}
                     >
                         キャンセル
