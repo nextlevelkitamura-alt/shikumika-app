@@ -172,15 +172,15 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
                             selected={selectedDate}
                             onSelect={handleDateSelect}
                             locale={ja}
-                            showOutsideDays={false}
+                            showOutsideDays={true} // Enable to ensure grid structure (offset), hidden via CSS
                             fixedWeeks
-                            className="p-0 border rounded-md p-1" // Add border for container structure
+                            className="p-0 border rounded-md p-1"
                             classNames={{
                                 caption: "hidden",
                                 nav: "hidden",
                                 month: "space-y-0",
                                 table: "w-full border-collapse",
-                                // LAYOUT FIX: Use CSS Grid for robust alignment
+                                // LAYOUT FIX: Enforce strict 7-column grid
                                 head_row: "grid grid-cols-7 mb-1",
                                 head_cell: "text-muted-foreground w-full font-normal text-[0.8rem] text-center py-1",
                                 row: "grid grid-cols-7 mt-0 w-full",
@@ -192,7 +192,7 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
                                 day_range_end: "day-range-end",
                                 day_selected: "!bg-primary !text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
                                 day_today: "bg-accent/50 text-accent-foreground font-bold",
-                                day_outside: "day-outside text-muted-foreground opacity-50 aria-selected:bg-accent/50 aria-selected:text-muted-foreground aria-selected:opacity-30",
+                                day_outside: "invisible", // Hidden but occupies space for correct offset
                                 day_disabled: "text-muted-foreground opacity-50",
                                 day_hidden: "invisible",
                             }}
