@@ -33,23 +33,23 @@ function TimeWheel({
     const minutes = Array.from({ length: 12 }, (_, i) => i * 5); // 5分刻み
 
     return (
-        <div className="flex flex-col h-full border-l pl-3 ml-3 w-[100px] shrink-0">
-            <div className="flex items-center justify-center gap-2 mb-2 text-xs font-semibold text-muted-foreground pb-2 border-b">
+        <div className="flex flex-col h-[300px] border-l border-zinc-700/50 pl-2 ml-2 w-[120px] shrink-0">
+            <div className="flex items-center justify-center gap-1.5 py-3 mb-1 text-xs font-medium text-muted-foreground border-b border-zinc-700/50 select-none">
                 <Clock className="w-3.5 h-3.5" />
                 <span>時間</span>
             </div>
-            <div className="flex gap-1 h-[240px]">
+            <div className="flex flex-1 relative h-full">
                 {/* Hours */}
-                <ScrollArea className="h-full w-12 rounded-md border bg-background/50">
-                    <div className="flex flex-col items-center py-24 space-y-1">
+                <ScrollArea className="h-full flex-1">
+                    <div className="flex flex-col items-center py-24 space-y-3">
                         {hours.map((h) => (
                             <button
                                 key={h}
                                 className={cn(
-                                    "w-8 h-8 rounded-full text-xs flex items-center justify-center transition-all shrink-0 font-medium",
+                                    "w-8 h-8 rounded-full text-sm flex items-center justify-center transition-all shrink-0 font-medium",
                                     selectedDate?.getHours() === h
-                                        ? "bg-primary text-primary-foreground font-bold shadow-md scale-105"
-                                        : "text-muted-foreground hover:bg-muted"
+                                        ? "bg-white text-black font-bold shadow-md scale-110"
+                                        : "text-muted-foreground hover:text-foreground"
                                 )}
                                 onClick={() => onTimeChange("hour", h)}
                             >
@@ -59,21 +59,21 @@ function TimeWheel({
                     </div>
                 </ScrollArea>
 
-                <div className="flex items-center justify-center h-full pb-4">
-                    <span className="text-muted-foreground font-bold">:</span>
+                <div className="flex items-center justify-center pt-24 h-full px-1">
+                    <span className="text-muted-foreground/30 font-light">:</span>
                 </div>
 
                 {/* Minutes */}
-                <ScrollArea className="h-full w-12 rounded-md border bg-background/50">
-                    <div className="flex flex-col items-center py-24 space-y-1">
+                <ScrollArea className="h-full flex-1">
+                    <div className="flex flex-col items-center py-24 space-y-3">
                         {minutes.map((m) => (
                             <button
                                 key={m}
                                 className={cn(
-                                    "w-8 h-8 rounded-full text-xs flex items-center justify-center transition-all shrink-0 font-medium",
+                                    "w-8 h-8 rounded-full text-sm flex items-center justify-center transition-all shrink-0 font-medium",
                                     selectedDate?.getMinutes() === m
-                                        ? "bg-primary text-primary-foreground font-bold shadow-md scale-105"
-                                        : "text-muted-foreground hover:bg-muted"
+                                        ? "bg-white text-black font-bold shadow-md scale-110"
+                                        : "text-muted-foreground hover:text-foreground"
                                 )}
                                 onClick={() => onTimeChange("minute", m)}
                             >
@@ -129,8 +129,9 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
         setCurrentMonth(newMonth)
     }
 
-    // Manual Weekday Header (Monday Start)
-    const weekdays = ["月", "火", "水", "木", "金", "土", "日"];
+    // Manual Weekday Header (Sunday Start to match Ideal Image)
+    // "日 月 火 水 木 金 土"
+    const weekdays = ["日", "月", "火", "水", "木", "金", "土"];
 
     return (
         <Popover open={isOpen} onOpenChange={setIsOpen}>
@@ -148,35 +149,35 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
                     </Button>
                 )}
             </PopoverTrigger>
-            <PopoverContent className="w-auto p-0 border-none shadow-xl bg-popover" align="start">
-                <div className="flex p-3 rounded-md border min-w-[380px]">
+            <PopoverContent className="w-auto p-0 border-none shadow-2xl bg-[#18181b] text-white" align="start">
+                <div className="flex p-4 rounded-xl border border-zinc-800">
                     {/* Left Side: Calendar */}
-                    <div className="flex flex-col w-[260px] mr-2">
+                    <div className="flex flex-col w-[280px] mr-2">
                         {/* 1. Custom Header */}
-                        <div className="flex items-center justify-between px-1 mb-2">
-                            <div className="font-semibold text-sm pl-1">
+                        <div className="flex items-center justify-between px-2 mb-4">
+                            <div className="font-bold text-base pl-1">
                                 {format(currentMonth, "yyyy年 M月", { locale: ja })}
                             </div>
-                            <div className="flex items-center gap-1">
-                                <Button variant="ghost" size="icon" className="h-7 w-7 rounded-md" onClick={() => handleMonthChange(-1)}>
+                            <div className="flex items-center gap-2">
+                                <Button variant="ghost" size="icon" className="h-6 w-6 text-zinc-400 hover:text-white" onClick={() => handleMonthChange(-1)}>
                                     <ChevronLeft className="h-4 w-4" />
                                 </Button>
-                                <Button variant="ghost" size="icon" className="h-7 w-7 rounded-md" onClick={() => handleMonthChange(1)}>
+                                <Button variant="ghost" size="icon" className="h-6 w-6 text-zinc-400 hover:text-white" onClick={() => handleMonthChange(1)}>
                                     <ChevronRight className="h-4 w-4" />
                                 </Button>
                             </div>
                         </div>
 
-                        {/* 2. Manual Weekday Header (Monday Start) */}
-                        <div className="grid grid-cols-7 mb-1 text-center">
+                        {/* 2. Manual Weekday Header */}
+                        <div className="grid grid-cols-7 mb-0 text-center border-b border-zinc-800">
                             {weekdays.map((day) => (
-                                <div key={day} className="text-[0.8rem] text-muted-foreground font-normal py-1">
+                                <div key={day} className="text-sm font-medium text-zinc-400 py-2">
                                     {day}
                                 </div>
                             ))}
                         </div>
 
-                            // 3. Calendar with GRID LAYOUT & Offset
+                        {/* 3. Calendar with Standard Table Layout (Robust Grid Lines) */}
                         <Calendar
                             mode="single"
                             month={currentMonth}
@@ -184,29 +185,46 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
                             selected={selectedDate}
                             onSelect={handleDateSelect}
                             locale={ja}
-                            weekStartsOn={1} // Monday start
-                            showOutsideDays={true} // Enable offset cells
+                            showOutsideDays={false} // Match ideal image (empty black cells)
                             fixedWeeks
-                            className="p-0 border rounded-md p-1"
+                            className="p-0 border-l border-zinc-800"
                             classNames={{
                                 caption: "hidden",
                                 nav: "hidden",
                                 month: "space-y-0",
-                                // FIX: Force table parts to block so 'row' grid works
-                                table: "w-full border-collapse block",
+                                // Use standard table layout for perfect borders
+                                table: "w-full border-collapse",
+                                head_row: "hidden", // We observe the manual header above
+                                row: "flex w-full mt-0", // react-day-picker v8 uses flex rows by default, we force display:table-row equivalent via parent?
+                                // Actually, react-day-picker renders a table. If we remove 'flex' from 'row', it behaves like a TR.
+                                // Let's clear the 'row' class to let it be a natural TR.
+                                // BUT, shadcn/ui calendar usually forces 'flex'.
+                                // We will force TABLE styling here.
+                                tbody: "block w-full", // Wait, for border-collapse to work on cells, we need TABLE display.
+                                // Let's try STRICT TABLE override.
+                            }}
+                            // Overriding shadcn styles requires deep class targeting or structural reset.
+                            // Better approach for "Grid Lines": Treat rows as Grid or Flex with borders.
+                            // Let's use the Grid approach which allows borders on cells easily.
+                            // We use the "force block" fix but apply borders to cells.
+                            classNames={{
+                                caption: "hidden",
+                                nav: "hidden",
+                                month: "space-y-0",
+                                table: "w-full border-collapse block", // Block table to allow grid row
                                 tbody: "w-full block",
                                 head_row: "hidden",
-                                row: "grid grid-cols-7 mt-0 w-full",
-                                cell: "relative p-0 text-center text-sm focus-within:relative focus-within:z-20 aspect-square flex items-center justify-center",
+                                row: "grid grid-cols-7 w-full border-b border-zinc-800", // Row border
+                                cell: "relative p-0 text-center text-sm focus-within:relative focus-within:z-20 aspect-square border-r border-zinc-800 flex items-center justify-center", // Cell border
                                 day: cn(
                                     buttonVariants({ variant: "ghost" }),
-                                    "h-8 w-8 p-0 font-normal aria-selected:opacity-100 rounded-md hover:bg-primary/20 hover:text-primary transition-colors"
+                                    "h-full w-full p-0 font-normal aria-selected:opacity-100 rounded-none hover:bg-zinc-800 text-zinc-300"
                                 ),
                                 day_range_end: "day-range-end",
-                                day_selected: "!bg-primary !text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
-                                day_today: "bg-accent/50 text-accent-foreground font-bold",
+                                day_selected: "bg-transparent text-white font-bold relative after:content-[''] after:absolute after:inset-1 after:bg-zinc-700 after:rounded-full after:-z-10",
+                                day_today: "text-white font-bold",
                                 day_outside: "invisible",
-                                day_disabled: "text-muted-foreground opacity-50",
+                                day_disabled: "text-zinc-600 opacity-50",
                                 day_hidden: "invisible",
                             }}
                             formatters={{
