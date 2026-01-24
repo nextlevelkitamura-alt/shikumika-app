@@ -21,7 +21,7 @@ import dagre from 'dagre';
 import { Database } from "@/types/database";
 import { cn } from "@/lib/utils";
 import { Calendar as CalendarIcon, X } from "lucide-react";
-import { PriorityPopover, Priority } from "@/components/ui/priority-select";
+import { PriorityBadge, PriorityPopover, Priority, getPriorityIconColor } from "@/components/ui/priority-select";
 
 // DateTimePicker を dynamic import（SSR を完全に無効化）
 const DateTimePicker = dynamic(
@@ -763,11 +763,56 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
 
             {/* Priority & DateTime Info Group */}
             <div className="nodrag nopan flex items-center gap-1 shrink-0 ml-1">
-                {/* Priority Popover */}
-                <PriorityPopover
-                    value={(data?.priority as Priority) || 3}
-                    onChange={(priority) => data?.onUpdatePriority?.(priority)}
-                />
+                {/* Priority Group */}
+                {data?.priority ? (
+                    <>
+                        {/* Priority Badge */}
+                        <PriorityBadge value={data.priority as Priority} />
+                        
+                        {/* Clear Button */}
+                        <button
+                            className="p-0.5 rounded text-zinc-500 hover:text-red-400 transition-colors"
+                            onClick={(e) => {
+                                e.stopPropagation()
+                                data?.onUpdatePriority?.(null as any)
+                            }}
+                            title="優先度を削除"
+                        >
+                            <X className="w-2.5 h-2.5" />
+                        </button>
+                        
+                        {/* Priority Icon (colored) */}
+                        <PriorityPopover
+                            value={data.priority as Priority}
+                            onChange={(priority) => data?.onUpdatePriority?.(priority)}
+                            trigger={
+                                <button 
+                                    className={cn(
+                                        "p-0.5 rounded transition-colors text-xs",
+                                        getPriorityIconColor(data.priority as Priority)
+                                    )}
+                                    title="優先度を変更"
+                                >
+                                    🎯
+                                </button>
+                            }
+                        />
+                    </>
+                ) : (
+                    /* Priority not set: Icon only (gray) */
+                    <PriorityPopover
+                        value={3}
+                        onChange={(priority) => data?.onUpdatePriority?.(priority)}
+                        trigger={
+                            <button 
+                                className="p-0.5 rounded text-zinc-500 hover:text-zinc-400 transition-colors text-xs"
+                                title="優先度を設定"
+                            >
+                                🎯
+                            </button>
+                        }
+                    />
+                )}
                 
                 {/* DateTime Picker */}
                 <DateTimePicker

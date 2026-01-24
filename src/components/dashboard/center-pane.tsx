@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils"
 import { MindMap } from "./mind-map"
 import { useTimer, formatTime } from "@/contexts/TimerContext"
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd"
-import { PrioritySelect, Priority } from "@/components/ui/priority-select"
+import { PriorityBadge, PriorityPopover, Priority, getPriorityIconColor } from "@/components/ui/priority-select"
 
 // DateTimePicker を dynamic import（SSR を完全に無効化）
 const DateTimePicker = dynamic(
@@ -252,10 +252,63 @@ function TaskItem({
                     </div>
 
                     {/* Group 2: Priority */}
-                    <PrioritySelect
-                        value={(task.priority as Priority) || 3}
-                        onChange={(priority) => onUpdateTask?.(task.id, { priority })}
-                    />
+                    <div className="flex items-center gap-1">
+                        {task.priority ? (
+                            <>
+                                {/* Priority Badge */}
+                                <PriorityBadge value={task.priority as Priority} />
+                                
+                                {/* Clear Button */}
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-4 w-4 text-zinc-500 hover:text-red-400 transition-colors"
+                                    onClick={(e) => {
+                                        e.stopPropagation()
+                                        onUpdateTask?.(task.id, { priority: null })
+                                    }}
+                                    title="優先度を削除"
+                                >
+                                    <X className="w-3 h-3" />
+                                </Button>
+                                
+                                {/* Priority Icon (colored) */}
+                                <PriorityPopover
+                                    value={task.priority as Priority}
+                                    onChange={(priority) => onUpdateTask?.(task.id, { priority })}
+                                    trigger={
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className={cn(
+                                                "h-6 w-6 transition-colors",
+                                                getPriorityIconColor(task.priority as Priority)
+                                            )}
+                                            title="優先度を変更"
+                                        >
+                                            🎯
+                                        </Button>
+                                    }
+                                />
+                            </>
+                        ) : (
+                            /* Priority not set: Icon only (gray) */
+                            <PriorityPopover
+                                value={3}
+                                onChange={(priority) => onUpdateTask?.(task.id, { priority })}
+                                trigger={
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-6 w-6 text-zinc-500 hover:text-zinc-400 transition-colors opacity-0 group-hover:opacity-100"
+                                        title="優先度を設定"
+                                    >
+                                        🎯
+                                    </Button>
+                                }
+                            />
+                        )}
+                    </div>
 
                     {/* Group 3: Date Info */}
                     <div className="flex items-center gap-1">
