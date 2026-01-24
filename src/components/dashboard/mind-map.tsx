@@ -20,7 +20,7 @@ import 'reactflow/dist/style.css';
 import dagre from 'dagre';
 import { Database } from "@/types/database";
 import { cn } from "@/lib/utils";
-import { Calendar as CalendarIcon } from "lucide-react";
+import { Calendar as CalendarIcon, X } from "lucide-react";
 
 // DateTimePicker を dynamic import（SSR を完全に無効化）
 const DateTimePicker = dynamic(
@@ -760,22 +760,54 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
                 )}
             />
 
-            {/* DateTime Picker Trigger */}
-            <div className="nodrag nopan flex items-center shrink-0 ml-1">
-                <DateTimePicker
-                    date={data?.scheduled_at ? new Date(data.scheduled_at) : undefined}
-                    setDate={(date) => data?.onUpdateDate?.(date ? date.toISOString() : null)}
-                    trigger={
-                        <button className={cn(
-                            "p-0.5 rounded hover:bg-muted text-muted-foreground transition-colors",
-                            data?.scheduled_at && "text-primary bg-primary/10"
-                        )}
-                            title={data?.scheduled_at ? new Date(data.scheduled_at).toLocaleString() : "日時設定"}
+            {/* DateTime Info Group */}
+            <div className="nodrag nopan flex items-center gap-1 shrink-0 ml-1">
+                {data?.scheduled_at ? (
+                    <>
+                        {/* Date Text */}
+                        <span className="text-[10px] text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer">
+                            {new Date(data.scheduled_at).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                        
+                        {/* Clear Button */}
+                        <button
+                            className="p-0.5 rounded text-zinc-500 hover:text-red-400 transition-colors"
+                            onClick={(e) => {
+                                e.stopPropagation()
+                                data?.onUpdateDate?.(null)
+                            }}
+                            title="日時設定を削除"
                         >
-                            <CalendarIcon className="w-3 h-3" />
+                            <X className="w-2.5 h-2.5" />
                         </button>
-                    }
-                />
+                        
+                        {/* Calendar Icon */}
+                        <DateTimePicker
+                            date={new Date(data.scheduled_at)}
+                            setDate={(date) => data?.onUpdateDate?.(date ? date.toISOString() : null)}
+                            trigger={
+                                <button className="p-0.5 rounded text-sky-400 hover:text-sky-300 transition-colors"
+                                    title="日時設定"
+                                >
+                                    <CalendarIcon className="w-3 h-3" />
+                                </button>
+                            }
+                        />
+                    </>
+                ) : (
+                    /* Date not set: Calendar icon only */
+                    <DateTimePicker
+                        date={undefined}
+                        setDate={(date) => data?.onUpdateDate?.(date ? date.toISOString() : null)}
+                        trigger={
+                            <button className="p-0.5 rounded text-zinc-500 hover:text-zinc-400 transition-colors"
+                                title="日時設定"
+                            >
+                                <CalendarIcon className="w-3 h-3" />
+                            </button>
+                        }
+                    />
+                )}
             </div>
 
             <Handle type="source" position={Position.Right} className="!bg-muted-foreground/50 !w-1 !h-1" />

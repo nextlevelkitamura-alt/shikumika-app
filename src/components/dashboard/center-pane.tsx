@@ -5,7 +5,7 @@ import dynamic from "next/dynamic"
 import { Database } from "@/types/database"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
-import { MoreHorizontal, Play, Check, ChevronRight, ChevronDown, Plus, Trash2, Pause, RotateCcw, Timer, GripVertical, Calendar as CalendarIcon } from "lucide-react"
+import { MoreHorizontal, Play, Check, ChevronRight, ChevronDown, Plus, Trash2, Pause, RotateCcw, Timer, GripVertical, Calendar as CalendarIcon, X } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import { MindMap } from "./mind-map"
@@ -179,121 +179,160 @@ function TaskItem({
                     <MiniProgress value={completedChildren} total={childTasks.length} />
                 )}
 
-                {/* Timer Controls */}
-                <div className="flex items-center gap-1">
-                    {/* Time Display */}
-                    {(taskElapsedSeconds > 0 || isTimerRunning) && (
-                        <span className={cn(
-                            "text-xs font-mono tabular-nums px-1.5 py-0.5 rounded",
-                            isTimerRunning ? "bg-primary/10 text-primary" : "text-muted-foreground"
-                        )}>
-                            <Timer className="inline w-3 h-3 mr-1" />
-                            {formatTime(taskElapsedSeconds)}
-                        </span>
-                    )}
+                {/* Timer & Date Controls */}
+                <div className="flex items-center gap-3">
+                    {/* Group 1: Timer Info */}
+                    <div className="flex items-center gap-2">
+                        {/* Time Display */}
+                        {(taskElapsedSeconds > 0 || isTimerRunning) && (
+                            <span className={cn(
+                                "text-xs font-mono tabular-nums px-1.5 py-0.5 rounded",
+                                isTimerRunning ? "bg-primary/10 text-primary" : "text-muted-foreground"
+                            )}>
+                                <Timer className="inline w-3 h-3 mr-1" />
+                                {formatTime(taskElapsedSeconds)}
+                            </span>
+                        )}
 
-                    {/* Scheduled Date Display */}
-                    {task.scheduled_at && (
-                        <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded mr-1">
-                            {new Date(task.scheduled_at).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                    )}
+                        {/* Focus Button */}
+                        {isTimerRunning ? (
+                            /* Running State: Pause / Complete / Interrupt */
+                            <>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6 text-amber-500 hover:bg-amber-500/10"
+                                    onClick={() => pauseTimer()}
+                                    disabled={isLoading}
+                                    title="一時停止"
+                                >
+                                    <Pause className="w-3.5 h-3.5" />
+                                </Button>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6 text-green-500 hover:bg-green-500/10"
+                                    onClick={() => completeTimer()}
+                                    disabled={isLoading}
+                                    title="完了"
+                                >
+                                    <Check className="w-3.5 h-3.5" />
+                                </Button>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6 text-muted-foreground hover:bg-muted/50"
+                                    onClick={() => interruptTimer()}
+                                    disabled={isLoading}
+                                    title="中断・戻る"
+                                >
+                                    <RotateCcw className="w-3.5 h-3.5" />
+                                </Button>
+                            </>
+                        ) : (
+                            /* Stopped State: Play button */
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                className={cn(
+                                    "h-6 text-[10px] gap-1",
+                                    runningTaskId && runningTaskId !== task.id
+                                        ? "border-amber-500/50 text-amber-600 hover:bg-amber-500/10"
+                                        : "hover:bg-primary hover:text-primary-foreground"
+                                )}
+                                onClick={() => startTimer(task)}
+                                disabled={isLoading || task.status === 'done'}
+                                title={runningTaskId && runningTaskId !== task.id ? "別タスクで計測中（切替可能）" : "タイマー開始"}
+                            >
+                                <Play className="w-2.5 h-2.5" />
+                                {runningTaskId && runningTaskId !== task.id ? "切替" : "フォーカス"}
+                            </Button>
+                        )}
+                    </div>
 
-                    {isTimerRunning ? (
-                        /* Running State: Pause / Complete / Interrupt */
-                        <>
+                    {/* Group 2: Date Info */}
+                    <div className="flex items-center gap-1">
+                        {task.scheduled_at ? (
+                            <>
+                                {/* Date Text (clickable) */}
+                                <span className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer">
+                                    {new Date(task.scheduled_at).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                                
+                                {/* Clear Button */}
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-4 w-4 text-zinc-500 hover:text-red-400 transition-colors"
+                                    onClick={(e) => {
+                                        e.stopPropagation()
+                                        onUpdateTask?.(task.id, { scheduled_at: null })
+                                    }}
+                                    title="日時設定を削除"
+                                >
+                                    <X className="w-3 h-3" />
+                                </Button>
+                                
+                                {/* Calendar Icon */}
+                                <DateTimePicker
+                                    date={new Date(task.scheduled_at)}
+                                    setDate={(date) => onUpdateTask?.(task.id, { scheduled_at: date ? date.toISOString() : null })}
+                                    trigger={
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-6 w-6 text-sky-400 hover:text-sky-300 transition-colors"
+                                            title="日時設定"
+                                        >
+                                            <CalendarIcon className="w-4 h-4" />
+                                        </Button>
+                                    }
+                                />
+                            </>
+                        ) : (
+                            /* Date not set: Calendar icon only */
+                            <DateTimePicker
+                                date={undefined}
+                                setDate={(date) => onUpdateTask?.(task.id, { scheduled_at: date ? date.toISOString() : null })}
+                                trigger={
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-6 w-6 text-zinc-500 hover:text-zinc-400 transition-colors opacity-0 group-hover:opacity-100"
+                                        title="日時設定"
+                                    >
+                                        <CalendarIcon className="w-4 h-4" />
+                                    </Button>
+                                }
+                            />
+                        )}
+                    </div>
+
+                    {/* Group 3: Other Actions (Hover) */}
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {canAddChildren && (
                             <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-6 w-6 text-amber-500 hover:bg-amber-500/10"
-                                onClick={() => pauseTimer()}
-                                disabled={isLoading}
-                                title="一時停止"
+                                className="h-6 w-6 text-muted-foreground hover:text-primary"
+                                onClick={handleAddChildTask}
+                                title="サブタスク追加"
                             >
-                                <Pause className="w-3.5 h-3.5" />
+                                <Plus className="w-3 h-3" />
                             </Button>
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-6 w-6 text-green-500 hover:bg-green-500/10"
-                                onClick={() => completeTimer()}
-                                disabled={isLoading}
-                                title="完了"
-                            >
-                                <Check className="w-3.5 h-3.5" />
-                            </Button>
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-6 w-6 text-muted-foreground hover:bg-muted/50"
-                                onClick={() => interruptTimer()}
-                                disabled={isLoading}
-                                title="中断・戻る"
-                            >
-                                <RotateCcw className="w-3.5 h-3.5" />
-                            </Button>
-                        </>
-                    ) : (
-                        /* Stopped State: Play button (visible on hover) */
-                        /* Show different state if another timer is running */
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            className={cn(
-                                "h-6 text-[10px] gap-1 opacity-0 group-hover:opacity-100 transition-opacity",
-                                runningTaskId && runningTaskId !== task.id
-                                    ? "border-amber-500/50 text-amber-600 hover:bg-amber-500/10"
-                                    : "hover:bg-primary hover:text-primary-foreground"
-                            )}
-                            onClick={() => startTimer(task)}
-                            disabled={isLoading || task.status === 'done'}
-                            title={runningTaskId && runningTaskId !== task.id ? "別タスクで計測中（切替可能）" : "タイマー開始"}
-                        >
-                            <Play className="w-2.5 h-2.5" />
-                            {runningTaskId && runningTaskId !== task.id ? "切替" : "フォーカス"}
-                        </Button>
-                    )}
-                </div>
+                        )}
 
-                {/* Actions (Hover) */}
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <DateTimePicker
-                        date={task.scheduled_at ? new Date(task.scheduled_at) : undefined}
-                        setDate={(date) => onUpdateTask?.(task.id, { scheduled_at: date ? date.toISOString() : null })}
-                        trigger={
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className={cn("h-6 w-6 hover:text-primary", task.scheduled_at ? "text-primary/70" : "text-muted-foreground")}
-                                title="日時設定"
-                            >
-                                <CalendarIcon className="w-3.5 h-3.5" />
-                            </Button>
-                        }
-                    />
-
-                    {canAddChildren && (
+                        {/* Direct Delete Button */}
                         <Button
                             variant="ghost"
                             size="icon"
-                            className="h-6 w-6 text-muted-foreground hover:text-primary"
-                            onClick={handleAddChildTask}
-                            title="サブタスク追加"
+                            className="h-6 w-6 text-destructive hover:bg-destructive/10"
+                            onClick={() => onDeleteTask?.(task.id)}
+                            title="削除"
                         >
-                            <Plus className="w-3 h-3" />
+                            <Trash2 className="w-3 h-3" />
                         </Button>
-                    )}
-
-                    {/* Direct Delete Button */}
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 text-destructive hover:bg-destructive/10"
-                        onClick={() => onDeleteTask?.(task.id)}
-                        title="削除"
-                    >
-                        <Trash2 className="w-3 h-3" />
-                    </Button>
+                    </div>
                 </div>
             </div>
 
