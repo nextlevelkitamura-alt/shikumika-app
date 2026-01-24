@@ -129,8 +129,7 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
         setCurrentMonth(newMonth)
     }
 
-    // Manual Weekday Header (Strictly matched to Sunday start based on latest request)
-    // "日 月 火 水 木 金 土"
+    // Manual Weekday Header
     const weekdays = ["日", "月", "火", "水", "木", "金", "土"];
 
     return (
@@ -168,7 +167,7 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
                             </div>
                         </div>
 
-                        {/* 2. Manual Weekday Header (Restored) */}
+                        {/* 2. Manual Weekday Header */}
                         <div className="grid grid-cols-7 mb-0 text-center border-b border-zinc-800">
                             {weekdays.map((day) => (
                                 <div key={day} className="text-sm font-medium text-zinc-400 py-2">
@@ -177,7 +176,7 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
                             ))}
                         </div>
 
-                        {/* 3. Calendar with ROBUST STANDARD TABLE LAYOUT */}
+                        {/* 3. Calendar Grid */}
                         <Calendar
                             mode="single"
                             month={currentMonth}
@@ -185,15 +184,17 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
                             selected={selectedDate}
                             onSelect={handleDateSelect}
                             locale={ja}
-                            showOutsideDays={true} // True allows offset cells to exist. We hide them via CSS.
+                            showOutsideDays={true}
                             fixedWeeks
                             className="p-0 border-l border-zinc-800"
                             classNames={{
                                 caption: "hidden",
                                 nav: "hidden",
                                 month: "space-y-0",
-                                table: "w-full border-collapse",
-                                head_row: "hidden", // Hide actual header, use manual one above
+                                // Table Layout: Fixed layout ensures equal column widths matching the manual header 
+                                table: "w-full border-collapse table-fixed",
+                                head_row: "hidden", // Hide the internal header completely
+                                head_cell: "hidden",
                                 tbody: "w-full",
                                 row: "table-row w-full mt-0 border-b border-zinc-800",
                                 cell: "table-cell p-0 text-center text-sm focus-within:relative focus-within:z-20 aspect-square border-r border-zinc-800 align-middle",
@@ -204,7 +205,8 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
                                 day_range_end: "day-range-end",
                                 day_selected: "bg-transparent text-white font-bold relative after:content-[''] after:absolute after:inset-1 after:bg-zinc-700 after:rounded-full after:-z-10",
                                 day_today: "text-white font-bold",
-                                day_outside: "text-transparent opacity-0 pointer-events-none select-none", // Ensure mysterious numbers are gone
+                                // Effectively hide outside days but keep them in the DOM for spacing
+                                day_outside: "text-transparent opacity-0 pointer-events-none select-none",
                                 day_disabled: "text-zinc-600 opacity-50",
                                 day_hidden: "invisible",
                             }}
