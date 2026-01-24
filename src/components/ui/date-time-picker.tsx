@@ -21,7 +21,7 @@ interface DateTimePickerProps {
     trigger?: React.ReactNode
 }
 
-// Wheel-style Time Picker Component
+// Wheel-style Time Picker Component (Maintained)
 function TimeWheel({
     selectedDate,
     onTimeChange
@@ -33,22 +33,22 @@ function TimeWheel({
     const minutes = Array.from({ length: 12 }, (_, i) => i * 5); // 5分刻み
 
     return (
-        <div className="flex flex-col h-full border-l pl-3 ml-3">
-            <div className="flex items-center gap-2 mb-2 text-xs font-semibold text-muted-foreground pb-2 border-b">
+        <div className="flex flex-col h-full border-l pl-3 ml-3 w-[100px] shrink-0">
+            <div className="flex items-center justify-center gap-2 mb-2 text-xs font-semibold text-muted-foreground pb-2 border-b">
                 <Clock className="w-3.5 h-3.5" />
                 <span>時間</span>
             </div>
             <div className="flex gap-1 h-[240px]">
                 {/* Hours */}
                 <ScrollArea className="h-full w-12 rounded-md border bg-background/50">
-                    <div className="flex flex-col items-center py-24 space-y-1"> {/* Padding for center selection feel */}
+                    <div className="flex flex-col items-center py-24 space-y-1">
                         {hours.map((h) => (
                             <button
                                 key={h}
                                 className={cn(
-                                    "w-8 h-8 rounded-full text-xs flex items-center justify-center transition-all shrink-0",
+                                    "w-8 h-8 rounded-full text-xs flex items-center justify-center transition-all shrink-0 font-medium",
                                     selectedDate?.getHours() === h
-                                        ? "bg-primary text-primary-foreground font-bold scale-110"
+                                        ? "bg-primary text-primary-foreground font-bold shadow-md scale-105"
                                         : "text-muted-foreground hover:bg-muted"
                                 )}
                                 onClick={() => onTimeChange("hour", h)}
@@ -59,7 +59,9 @@ function TimeWheel({
                     </div>
                 </ScrollArea>
 
-                <span className="flex items-center text-muted-foreground font-bold pb-2">:</span>
+                <div className="flex items-center justify-center h-full pb-4">
+                    <span className="text-muted-foreground font-bold">:</span>
+                </div>
 
                 {/* Minutes */}
                 <ScrollArea className="h-full w-12 rounded-md border bg-background/50">
@@ -68,9 +70,9 @@ function TimeWheel({
                             <button
                                 key={m}
                                 className={cn(
-                                    "w-8 h-8 rounded-full text-xs flex items-center justify-center transition-all shrink-0",
+                                    "w-8 h-8 rounded-full text-xs flex items-center justify-center transition-all shrink-0 font-medium",
                                     selectedDate?.getMinutes() === m
-                                        ? "bg-primary text-primary-foreground font-bold scale-110"
+                                        ? "bg-primary text-primary-foreground font-bold shadow-md scale-105"
                                         : "text-muted-foreground hover:bg-muted"
                                 )}
                                 onClick={() => onTimeChange("minute", m)}
@@ -143,26 +145,26 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
                     </Button>
                 )}
             </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="start">
-                <div className="flex p-3">
+            <PopoverContent className="w-auto p-0 border-none shadow-xl bg-popover" align="start">
+                <div className="flex p-3 rounded-md border min-w-[380px]">
                     {/* Left Side: Calendar */}
-                    <div className="flex flex-col w-[260px]">
-                        {/* 1. Custom Header: Year/Month and Nav only (No "Double Header") */}
+                    <div className="flex flex-col w-[260px] mr-2">
+                        {/* 1. Custom Header */}
                         <div className="flex items-center justify-between px-1 mb-2">
                             <div className="font-semibold text-sm pl-1">
                                 {format(currentMonth, "yyyy年 M月", { locale: ja })}
                             </div>
                             <div className="flex items-center gap-1">
-                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleMonthChange(-1)}>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 rounded-md" onClick={() => handleMonthChange(-1)}>
                                     <ChevronLeft className="h-4 w-4" />
                                 </Button>
-                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleMonthChange(1)}>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 rounded-md" onClick={() => handleMonthChange(1)}>
                                     <ChevronRight className="h-4 w-4" />
                                 </Button>
                             </div>
                         </div>
 
-                        {/* 2. Calendar: Weekdays Enabled */}
+                        {/* 2. Calendar with GRID LAYOUT */}
                         <Calendar
                             mode="single"
                             month={currentMonth}
@@ -172,29 +174,28 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
                             locale={ja}
                             showOutsideDays={false}
                             fixedWeeks
-                            className="p-0"
+                            className="p-0 border rounded-md p-1" // Add border for container structure
                             classNames={{
-                                caption: "hidden", // Hide default caption to prevent duplication
-                                nav: "hidden",     // Hide default nav to prevent duplication
-                                month: "space-y-0", // Tighten spacing
-                                table: "w-full border-collapse space-y-1",
-                                // Ensure Weekday Headers are visible and styled
-                                head_row: "flex w-full mb-1",
-                                head_cell: "text-muted-foreground rounded-md w-8 font-normal text-[0.8rem] text-center",
-                                row: "flex w-full mt-2 gap-0",
-                                cell: "h-8 w-8 text-center text-sm p-0 flex items-center justify-center relative [&:has([aria-selected].day-range-end)]:rounded-r-md [&:has([aria-selected].day-outside)]:bg-accent/50 [&:has([aria-selected])]:bg-accent first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20",
+                                caption: "hidden",
+                                nav: "hidden",
+                                month: "space-y-0",
+                                table: "w-full border-collapse",
+                                // LAYOUT FIX: Use CSS Grid for robust alignment
+                                head_row: "grid grid-cols-7 mb-1",
+                                head_cell: "text-muted-foreground w-full font-normal text-[0.8rem] text-center py-1",
+                                row: "grid grid-cols-7 mt-0 w-full",
+                                cell: "relative p-0 text-center text-sm focus-within:relative focus-within:z-20 aspect-square flex items-center justify-center",
                                 day: cn(
                                     buttonVariants({ variant: "ghost" }),
-                                    "h-8 w-8 p-0 font-normal aria-selected:opacity-100"
+                                    "h-8 w-8 p-0 font-normal aria-selected:opacity-100 rounded-md hover:bg-primary/20 hover:text-primary transition-colors"
                                 ),
                                 day_range_end: "day-range-end",
-                                day_selected: "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
-                                day_today: "bg-accent text-accent-foreground",
+                                day_selected: "!bg-primary !text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
+                                day_today: "bg-accent/50 text-accent-foreground font-bold",
                                 day_outside: "day-outside text-muted-foreground opacity-50 aria-selected:bg-accent/50 aria-selected:text-muted-foreground aria-selected:opacity-30",
                                 day_disabled: "text-muted-foreground opacity-50",
                                 day_hidden: "invisible",
                             }}
-                            // Explicitly force FormatCaption to return null if css hiding fails
                             formatters={{
                                 formatCaption: () => ""
                             }}
