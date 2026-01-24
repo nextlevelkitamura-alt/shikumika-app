@@ -1,8 +1,8 @@
 "use client"
 
 import { useState, useRef, useEffect, useCallback } from "react"
+import dynamic from "next/dynamic"
 import { Database } from "@/types/database"
-import { DateTimePicker } from "@/components/ui/date-time-picker"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
 import { MoreHorizontal, Play, Check, ChevronRight, ChevronDown, Plus, Trash2, Pause, RotateCcw, Timer, GripVertical, Calendar as CalendarIcon } from "lucide-react"
@@ -11,6 +11,15 @@ import { cn } from "@/lib/utils"
 import { MindMap } from "./mind-map"
 import { useTimer, formatTime } from "@/contexts/TimerContext"
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd"
+
+// DateTimePicker を dynamic import（SSR を完全に無効化）
+const DateTimePicker = dynamic(
+    () => import("@/components/ui/date-time-picker").then((mod) => ({ default: mod.DateTimePicker })),
+    {
+        ssr: false,
+        loading: () => <div className="w-6 h-6 animate-spin border-2 border-zinc-600 border-t-transparent rounded-full" />,
+    }
+)
 
 type Project = Database['public']['Tables']['projects']['Row']
 type TaskGroup = Database['public']['Tables']['task_groups']['Row']

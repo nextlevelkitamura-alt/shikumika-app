@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useMemo, useState, useEffect, useLayoutEffect, useCallback, useRef, Component, ErrorInfo, ReactNode } from 'react';
+import dynamic from 'next/dynamic';
 import ReactFlow, {
     Node,
     Edge,
@@ -19,8 +20,16 @@ import 'reactflow/dist/style.css';
 import dagre from 'dagre';
 import { Database } from "@/types/database";
 import { cn } from "@/lib/utils";
-import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { Calendar as CalendarIcon } from "lucide-react";
+
+// DateTimePicker を dynamic import（SSR を完全に無効化）
+const DateTimePicker = dynamic(
+    () => import("@/components/ui/date-time-picker").then((mod) => ({ default: mod.DateTimePicker })),
+    {
+        ssr: false,
+        loading: () => <div className="w-6 h-6 animate-spin border-2 border-zinc-600 border-t-transparent rounded-full" />,
+    }
+);
 
 type TaskGroup = Database['public']['Tables']['task_groups']['Row']
 type Project = Database['public']['Tables']['projects']['Row']
