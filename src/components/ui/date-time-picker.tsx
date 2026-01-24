@@ -168,16 +168,7 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
                             </div>
                         </div>
 
-                        {/* 2. Manual Weekday Header */}
-                        <div className="grid grid-cols-7 mb-0 text-center border-b border-zinc-800">
-                            {weekdays.map((day) => (
-                                <div key={day} className="text-sm font-medium text-zinc-400 py-2">
-                                    {day}
-                                </div>
-                            ))}
-                        </div>
-
-                        {/* 3. Calendar with ROBUST STANDARD TABLE LAYOUT */}
+                        {/* 2. Calendar with ROBUST STANDARD TABLE LAYOUT */}
                         {/* We use border-collapse on the table to get minimal, strict grid lines. */}
                         <Calendar
                             mode="single"
@@ -195,7 +186,8 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
                                 month: "space-y-0",
                                 // OVERRIDE ALL FLEX STYLES TO TABLE STYLES
                                 table: "w-full border-collapse",
-                                head_row: "hidden", // We observe the manual header above
+                                head_row: "table-row w-full border-b border-zinc-800", // Visible Header Row
+                                head_cell: "table-cell text-muted-foreground w-10 font-normal text-[0.8rem] text-center py-2 border-r border-zinc-800 last:border-r-0", // Visible Grid Header Cell
                                 tbody: "w-full", // Default table-row-group
                                 row: "table-row w-full mt-0 border-b border-zinc-800", // Force table-row to respect border-collapse
                                 cell: "table-cell p-0 text-center text-sm focus-within:relative focus-within:z-20 aspect-square border-r border-zinc-800 align-middle",
