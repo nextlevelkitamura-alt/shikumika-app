@@ -176,7 +176,7 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
                             ))}
                         </div>
 
-                        {/* 3. Calendar with GRID LAYOUT & Offset */}
+                            // 3. Calendar with GRID LAYOUT & Offset
                         <Calendar
                             mode="single"
                             month={currentMonth}
@@ -192,8 +192,10 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
                                 caption: "hidden",
                                 nav: "hidden",
                                 month: "space-y-0",
-                                table: "w-full border-collapse",
-                                head_row: "hidden", // Hide actual header, use manual one above
+                                // FIX: Force table parts to block so 'row' grid works
+                                table: "w-full border-collapse block",
+                                tbody: "w-full block",
+                                head_row: "hidden",
                                 row: "grid grid-cols-7 mt-0 w-full",
                                 cell: "relative p-0 text-center text-sm focus-within:relative focus-within:z-20 aspect-square flex items-center justify-center",
                                 day: cn(
@@ -203,7 +205,7 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
                                 day_range_end: "day-range-end",
                                 day_selected: "!bg-primary !text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
                                 day_today: "bg-accent/50 text-accent-foreground font-bold",
-                                day_outside: "invisible", // Hidden but occupies space for correct offset
+                                day_outside: "invisible",
                                 day_disabled: "text-muted-foreground opacity-50",
                                 day_hidden: "invisible",
                             }}
