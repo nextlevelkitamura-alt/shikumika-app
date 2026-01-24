@@ -764,7 +764,7 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
             {/* Priority & DateTime Info Group */}
             <div className="nodrag nopan flex items-center gap-1 shrink-0 ml-1">
                 {/* Priority Group */}
-                {data?.priority ? (
+                {data?.priority != null ? (
                     <>
                         {/* Priority Badge (clickable) */}
                         <PriorityPopover
@@ -878,7 +878,7 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
         order_index: t?.order_index,
         created_at: t?.created_at,
         scheduled_at: t?.scheduled_at,
-        priority: (t as any)?.priority ?? 3 // Include priority
+        priority: (t as any)?.priority // Include priority (no default value)
     })) ?? []);
 
     // STATE
@@ -1490,7 +1490,7 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
                         label: task.title ?? 'Task',
                         status: task.status ?? 'todo',
                         scheduled_at: task.scheduled_at,
-                        priority: (task as any).priority ?? 3,
+                        priority: (task as any).priority,
                         isSelected: selectedNodeIds.has(task.id),
                         triggerEdit,
                         initialValue: '',
