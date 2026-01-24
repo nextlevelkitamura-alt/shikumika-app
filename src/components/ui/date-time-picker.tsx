@@ -141,6 +141,12 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
     const [isOpen, setIsOpen] = React.useState(false)
     const [currentMonth, setCurrentMonth] = React.useState<Date>(new Date())
     const [tempDate, setTempDate] = React.useState<Date | undefined>(date)
+    const [isMounted, setIsMounted] = React.useState(false)
+
+    // クライアントでマウントされたことを検知（SSR/Hydration Error 回避）
+    React.useEffect(() => {
+        setIsMounted(true)
+    }, [])
 
     React.useEffect(() => {
         if (isOpen) {
@@ -181,8 +187,10 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
                         )}
                     >
                         <CalendarIcon className="mr-2 h-4 w-4" />
-                        {date ? (
+                        {date && isMounted ? (
                             format(date, "yyyy年 M月 d日 HH:mm", { locale: ja })
+                        ) : date && !isMounted ? (
+                            "読み込み中..."
                         ) : (
                             <span>日時を選択</span>
                         )}
@@ -190,14 +198,15 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
                 )}
             </PopoverTrigger>
 
-            <PopoverContent
-                className="w-auto p-0 border border-zinc-800 bg-[#18181b] shadow-2xl rounded-xl overflow-hidden"
-                align="start"
-            >
-                <div className="flex p-4 pb-2">
-                    {/* LEFT: CALENDAR */}
-                    <div className="flex flex-col w-[280px]">
-                        <Calendar
+            {isMounted && (
+                <PopoverContent
+                    className="w-auto p-0 border border-zinc-800 bg-[#18181b] shadow-2xl rounded-xl overflow-hidden"
+                    align="start"
+                >
+                    <div className="flex p-4 pb-2">
+                        {/* LEFT: CALENDAR */}
+                        <div className="flex flex-col w-[280px]">
+                            <Calendar
                             mode="single"
                             month={currentMonth}
                             onMonthChange={setCurrentMonth}
@@ -273,7 +282,8 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
                         設定
                     </Button>
                 </div>
-            </PopoverContent>
+                </PopoverContent>
+            )}
         </Popover>
     )
 }
