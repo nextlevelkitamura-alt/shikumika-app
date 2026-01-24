@@ -21,6 +21,7 @@ import dagre from 'dagre';
 import { Database } from "@/types/database";
 import { cn } from "@/lib/utils";
 import { Calendar as CalendarIcon, X } from "lucide-react";
+import { PriorityPopover, Priority } from "@/components/ui/priority-select";
 
 // DateTimePicker を dynamic import（SSR を完全に無効化）
 const DateTimePicker = dynamic(
@@ -760,8 +761,15 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
                 )}
             />
 
-            {/* DateTime Info Group */}
+            {/* Priority & DateTime Info Group */}
             <div className="nodrag nopan flex items-center gap-1 shrink-0 ml-1">
+                {/* Priority Popover */}
+                <PriorityPopover
+                    value={(data?.priority as Priority) || 3}
+                    onChange={(priority) => data?.onUpdatePriority?.(priority)}
+                />
+                
+                {/* DateTime Picker */}
                 <DateTimePicker
                     date={data?.scheduled_at ? new Date(data.scheduled_at) : undefined}
                     setDate={(date) => data?.onUpdateDate?.(date ? date.toISOString() : null)}
@@ -840,7 +848,8 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
         parent_task_id: t?.parent_task_id,
         order_index: t?.order_index,
         created_at: t?.created_at,
-        scheduled_at: t?.scheduled_at // Include scheduled_at
+        scheduled_at: t?.scheduled_at,
+        priority: t?.priority ?? 3 // Include priority
     })) ?? []);
 
     // STATE
@@ -1357,6 +1366,12 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
         }
     }, [onUpdateTask]);
 
+    const updateTaskPriority = useCallback(async (taskId: string, priority: number) => {
+        if (onUpdateTask) {
+            await onUpdateTask(taskId, { priority });
+        }
+    }, [onUpdateTask]);
+
     // Check if node should trigger edit
     const shouldTriggerEdit = useCallback((taskId: string) => pendingEditNodeId === taskId, [pendingEditNodeId]);
 
@@ -1446,11 +1461,13 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
                         label: task.title ?? 'Task',
                         status: task.status ?? 'todo',
                         scheduled_at: task.scheduled_at,
+                        priority: task.priority ?? 3,
                         isSelected: selectedNodeIds.has(task.id),
                         triggerEdit,
                         initialValue: '',
                         onSave: (t: string) => saveTaskTitle(task.id, t),
                         onUpdateDate: (d: string | null) => updateTaskScheduledAt(task.id, d),
+                        onUpdatePriority: (p: number) => updateTaskPriority(task.id, p),
                         onAddChild: () => addChildTask(task.id),
                         onAddSibling: () => addSiblingTask(task.id),
                         onDelete: () => deleteTask(task.id),

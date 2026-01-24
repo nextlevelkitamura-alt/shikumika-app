@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils"
 import { MindMap } from "./mind-map"
 import { useTimer, formatTime } from "@/contexts/TimerContext"
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd"
+import { PrioritySelect, Priority } from "@/components/ui/priority-select"
 
 // DateTimePicker を dynamic import（SSR を完全に無効化）
 const DateTimePicker = dynamic(
@@ -250,7 +251,13 @@ function TaskItem({
                         )}
                     </div>
 
-                    {/* Group 2: Date Info */}
+                    {/* Group 2: Priority */}
+                    <PrioritySelect
+                        value={(task.priority as Priority) || 3}
+                        onChange={(priority) => onUpdateTask?.(task.id, { priority })}
+                    />
+
+                    {/* Group 3: Date Info */}
                     <div className="flex items-center gap-1">
                         <DateTimePicker
                             date={task.scheduled_at ? new Date(task.scheduled_at) : undefined}
@@ -302,7 +309,7 @@ function TaskItem({
                         />
                     </div>
 
-                    {/* Group 3: Other Actions (Hover) */}
+                    {/* Group 4: Other Actions (Hover) */}
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         {canAddChildren && (
                             <Button
