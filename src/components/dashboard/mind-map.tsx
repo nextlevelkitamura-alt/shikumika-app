@@ -766,8 +766,16 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
                 {/* Priority Group */}
                 {data?.priority ? (
                     <>
-                        {/* Priority Badge */}
-                        <PriorityBadge value={data.priority as Priority} />
+                        {/* Priority Badge (clickable) */}
+                        <PriorityPopover
+                            value={data.priority as Priority}
+                            onChange={(priority) => data?.onUpdatePriority?.(priority)}
+                            trigger={
+                                <span className="cursor-pointer">
+                                    <PriorityBadge value={data.priority as Priority} />
+                                </span>
+                            }
+                        />
                         
                         {/* Clear Button */}
                         <button
@@ -780,23 +788,6 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
                         >
                             <X className="w-2.5 h-2.5" />
                         </button>
-                        
-                        {/* Priority Icon (colored) */}
-                        <PriorityPopover
-                            value={data.priority as Priority}
-                            onChange={(priority) => data?.onUpdatePriority?.(priority)}
-                            trigger={
-                                <button 
-                                    className={cn(
-                                        "p-0.5 rounded transition-colors text-xs",
-                                        getPriorityIconColor(data.priority as Priority)
-                                    )}
-                                    title="優先度を変更"
-                                >
-                                    🎯
-                                </button>
-                            }
-                        />
                     </>
                 ) : (
                     /* Priority not set: Icon only (gray) */
@@ -836,13 +827,6 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
                                     title="日時設定を削除"
                                 >
                                     <X className="w-2.5 h-2.5" />
-                                </button>
-                                
-                                {/* Calendar Icon */}
-                                <button className="p-0.5 rounded text-sky-400 hover:text-sky-300 transition-colors"
-                                    title="日時設定"
-                                >
-                                    <CalendarIcon className="w-3 h-3" />
                                 </button>
                             </div>
                         ) : (

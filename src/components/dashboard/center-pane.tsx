@@ -255,8 +255,16 @@ function TaskItem({
                     <div className="flex items-center gap-1">
                         {task.priority ? (
                             <>
-                                {/* Priority Badge */}
-                                <PriorityBadge value={task.priority as Priority} />
+                                {/* Priority Badge (clickable) */}
+                                <PriorityPopover
+                                    value={task.priority as Priority}
+                                    onChange={(priority) => onUpdateTask?.(task.id, { priority })}
+                                    trigger={
+                                        <span className="cursor-pointer">
+                                            <PriorityBadge value={task.priority as Priority} />
+                                        </span>
+                                    }
+                                />
                                 
                                 {/* Clear Button */}
                                 <Button
@@ -271,25 +279,6 @@ function TaskItem({
                                 >
                                     <X className="w-3 h-3" />
                                 </Button>
-                                
-                                {/* Priority Icon (colored) */}
-                                <PriorityPopover
-                                    value={task.priority as Priority}
-                                    onChange={(priority) => onUpdateTask?.(task.id, { priority })}
-                                    trigger={
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className={cn(
-                                                "h-6 w-6 transition-colors",
-                                                getPriorityIconColor(task.priority as Priority)
-                                            )}
-                                            title="優先度を変更"
-                                        >
-                                            🎯
-                                        </Button>
-                                    }
-                                />
                             </>
                         ) : (
                             /* Priority not set: Icon only (gray) */
@@ -335,16 +324,6 @@ function TaskItem({
                                             title="日時設定を削除"
                                         >
                                             <X className="w-3 h-3" />
-                                        </Button>
-                                        
-                                        {/* Calendar Icon */}
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-6 w-6 text-sky-400 hover:text-sky-300 transition-colors"
-                                            title="日時設定"
-                                        >
-                                            <CalendarIcon className="w-4 h-4" />
                                         </Button>
                                     </div>
                                 ) : (
