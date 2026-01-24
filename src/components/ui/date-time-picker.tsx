@@ -186,14 +186,14 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
                                 ),
                                 nav_button_previous: "absolute left-1",
                                 nav_button_next: "absolute right-1",
-                                table: "w-full border-collapse space-y-1",
-                                head_row: "grid grid-cols-7 mb-2 w-full", // Switch to Grid
-                                head_cell: "text-zinc-500 rounded-md w-9 font-normal text-[0.8rem] text-center", // Weekday text
-                                row: "grid grid-cols-7 w-full mt-2", // Switch to Grid
-                                cell: "h-9 w-9 text-center text-sm p-0 relative [&:has([aria-selected].day-range-end)]:rounded-r-md [&:has([aria-selected].day-outside)]:bg-accent/50 [&:has([aria-selected])]:bg-accent first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20",
+                                table: "w-full border-collapse space-y-1 table-fixed", // Force fixed layout
+                                head_row: "table-row mb-2", // Standard table row
+                                head_cell: "text-zinc-500 rounded-md w-9 font-normal text-[0.8rem] text-center align-middle h-8", // Align middle
+                                row: "table-row w-full mt-2", // Standard table row
+                                cell: "h-9 w-9 text-center text-sm p-0 relative [&:has([aria-selected].day-range-end)]:rounded-r-md [&:has([aria-selected].day-outside)]:bg-accent/50 [&:has([aria-selected])]:bg-accent first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20 align-middle",
                                 day: cn(
                                     buttonVariants({ variant: "ghost" }),
-                                    "h-9 w-9 p-0 font-normal aria-selected:opacity-100 text-zinc-300 hover:bg-zinc-800 hover:text-white"
+                                    "h-9 w-9 p-0 font-normal aria-selected:opacity-100 text-zinc-300 hover:bg-zinc-800 hover:text-white mx-auto" // mx-auto for safety
                                 ),
                                 day_range_end: "day-range-end",
                                 day_selected: "bg-zinc-100 text-zinc-900 hover:bg-zinc-100 hover:text-zinc-900 focus:bg-zinc-100 focus:text-zinc-900 font-bold rounded-md",
