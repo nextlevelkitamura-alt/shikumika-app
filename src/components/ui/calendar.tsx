@@ -53,8 +53,14 @@ function Calendar({
                 ...classNames,
             }}
             components={{
-                IconLeft: ({ ...props }) => <ChevronLeft className="h-4 w-4" />,
-                IconRight: ({ ...props }) => <ChevronRight className="h-4 w-4" />,
+                Chevron: ({ ...props }) => {
+                    // React Day Picker v9 uses Chevron component for navigation
+                    // internal icons or we can customize.
+                    // For now, let's keep it simple or just use valid keys if needed.
+                    // Actually, let's just use the Defaults or if we want to force Lucide:
+                    if (props.orientation === 'left') return <ChevronLeft className="h-4 w-4" />
+                    return <ChevronRight className="h-4 w-4" />
+                }
             }}
             {...props}
         />
