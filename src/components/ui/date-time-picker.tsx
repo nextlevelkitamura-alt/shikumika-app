@@ -144,22 +144,23 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
 
     const handleDateSelect = (newDate: Date | undefined) => {
         if (!newDate) return
+        
+        // 既に時間が設定されている場合はその時間を保持、初回はデフォルト時間（09:00）
         const current = tempDate || new Date()
-        newDate.setHours(current.getHours())
-        newDate.setMinutes(current.getMinutes())
+        newDate.setHours(tempDate ? current.getHours() : 9)
+        newDate.setMinutes(tempDate ? current.getMinutes() : 0)
+        
         setTempDate(newDate)
+        setDate(newDate) // 即座に確定
     }
 
     const handleTimeChange = (type: "hour" | "minute", value: number) => {
         const newDate = tempDate ? new Date(tempDate) : new Date()
         if (type === "hour") newDate.setHours(value)
         else newDate.setMinutes(value)
+        
         setTempDate(newDate)
-    }
-
-    const onConfirm = () => {
-        setDate(tempDate)
-        setIsOpen(false)
+        setDate(newDate) // リアルタイムで更新
     }
 
     // SSR時は何も表示しない（Hydration Error 回避）
@@ -214,23 +215,6 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
 
                     {/* RIGHT: TIME WHEEL */}
                     <TimeWheel selectedDate={tempDate} onTimeChange={handleTimeChange} />
-                </div>
-
-                {/* FOOTER */}
-                <div className="flex items-center justify-between border-t border-zinc-800 bg-[#18181b] px-3 py-2">
-                    <Button
-                        variant="ghost"
-                        className="text-xs text-zinc-400 hover:text-white h-8 px-3"
-                        onClick={() => setIsOpen(false)}
-                    >
-                        キャンセル
-                    </Button>
-                    <Button
-                        className="text-xs h-8 px-4 bg-zinc-100 text-black hover:bg-white"
-                        onClick={onConfirm}
-                    >
-                        設定
-                    </Button>
                 </div>
             </PopoverContent>
         </Popover>
