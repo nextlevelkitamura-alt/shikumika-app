@@ -175,6 +175,22 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
         setIsOpen(false)
     }
 
+    // SSR時は何も表示しない（Hydration Error 回避）
+    if (!isMounted) {
+        return trigger || (
+            <Button
+                variant={"outline"}
+                className={cn(
+                    "w-[240px] justify-start text-left font-normal border-zinc-700 bg-zinc-900 text-zinc-100 hover:bg-zinc-800 hover:text-white",
+                    !date && "text-muted-foreground"
+                )}
+            >
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                <span>読み込み中...</span>
+            </Button>
+        )
+    }
+
     return (
         <Popover open={isOpen} onOpenChange={setIsOpen}>
             <PopoverTrigger asChild>
@@ -187,10 +203,8 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
                         )}
                     >
                         <CalendarIcon className="mr-2 h-4 w-4" />
-                        {date && isMounted ? (
+                        {date ? (
                             format(date, "yyyy年 M月 d日 HH:mm", { locale: ja })
-                        ) : date && !isMounted ? (
-                            "読み込み中..."
                         ) : (
                             <span>日時を選択</span>
                         )}
@@ -198,8 +212,7 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
                 )}
             </PopoverTrigger>
 
-            {isMounted && (
-                <PopoverContent
+            <PopoverContent
                     className="w-auto p-0 border border-zinc-800 bg-[#18181b] shadow-2xl rounded-xl overflow-hidden"
                     align="start"
                 >
@@ -282,8 +295,7 @@ export function DateTimePicker({ date, setDate, trigger }: DateTimePickerProps) 
                         設定
                     </Button>
                 </div>
-                </PopoverContent>
-            )}
+            </PopoverContent>
         </Popover>
     )
 }
