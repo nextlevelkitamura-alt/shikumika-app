@@ -510,6 +510,7 @@ export function CenterPane({
                     groups={groups}
                     tasks={tasks}
                     onUpdateGroupTitle={onUpdateGroupTitle || (() => { })}
+                    onUpdateGroup={onUpdateGroup}
                     onUpdateProject={onUpdateProject}
                     onCreateGroup={onCreateGroup}
                     onDeleteGroup={onDeleteGroup}

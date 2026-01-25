@@ -322,6 +322,25 @@ const GroupNode = React.memo(({ data, selected }: NodeProps) => {
     const [editValue, setEditValue] = useState(data?.label ?? '');
     const [showCaret, setShowCaret] = useState(false);
 
+    // Auto-complete logic: Check if all tasks are completed
+    const isGroupCompleted = useMemo(() => {
+        const tasks = data?.tasks || [];
+        if (tasks.length === 0) return false;
+        return tasks.every((t: any) => t.status === 'done');
+    }, [data?.tasks]);
+
+    // Handle group checkbox toggle
+    const handleGroupCheckToggle = useCallback(async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        const tasks = data?.tasks || [];
+        const newStatus = isGroupCompleted ? 'todo' : 'done';
+        
+        // Update all child tasks
+        for (const task of tasks) {
+            await data?.onUpdateTask?.(task.id, { status: newStatus });
+        }
+    }, [isGroupCompleted, data]);
+
     // Sync label
     useEffect(() => {
         if (!isEditing) {
@@ -428,7 +447,7 @@ const GroupNode = React.memo(({ data, selected }: NodeProps) => {
         <div
             ref={wrapperRef}
             className={cn(
-                "w-[240px] px-3 py-2 rounded-lg bg-card border text-sm font-medium text-center shadow transition-all outline-none min-h-[40px] flex items-center justify-center",
+                "w-auto min-w-[240px] max-w-[320px] px-3 py-2 rounded-lg bg-card border text-sm font-medium shadow transition-all outline-none min-h-[40px] flex items-center gap-2",
                 selected && "ring-2 ring-white ring-offset-2 ring-offset-background",
                 data?.isDropTarget && "ring-2 ring-sky-400 ring-offset-2 ring-offset-background"
             )}
@@ -436,20 +455,28 @@ const GroupNode = React.memo(({ data, selected }: NodeProps) => {
             onKeyDown={handleWrapperKeyDown}
             onDoubleClick={handleDoubleClick}
         >
-            {data?.onToggleCollapse && data?.hasChildren && (
-                <button
-                    type="button"
-                    className="nodrag nopan mr-1 text-[10px] text-muted-foreground hover:text-foreground shrink-0"
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        data.onToggleCollapse?.();
-                    }}
-                    aria-label={data?.collapsed ? 'Expand' : 'Collapse'}
-                >
-                    {data?.collapsed ? '>' : 'v'}
-                </button>
-            )}
             <Handle type="target" position={Position.Left} className="!bg-muted-foreground" />
+            
+            {/* Checkbox (left) */}
+            <button
+                type="button"
+                className={cn(
+                    "nodrag nopan w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors",
+                    isGroupCompleted 
+                        ? "bg-primary border-primary text-primary-foreground" 
+                        : "border-muted-foreground/30 hover:border-primary"
+                )}
+                onClick={handleGroupCheckToggle}
+                title={isGroupCompleted ? "グループを未完了に戻す" : "グループを完了"}
+            >
+                {isGroupCompleted && (
+                    <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                )}
+            </button>
+
+            {/* Group Name */}
             <textarea
                 ref={inputRef as any}
                 rows={1}
@@ -475,10 +502,57 @@ const GroupNode = React.memo(({ data, selected }: NodeProps) => {
                     }
                 }}
                 className={cn(
-                    "nodrag nopan w-full bg-transparent border-none text-sm text-center focus:outline-none focus:ring-0 resize-none overflow-hidden",
+                    "nodrag nopan flex-1 bg-transparent border-none text-sm text-center focus:outline-none focus:ring-0 resize-none overflow-hidden min-w-0",
                     !showCaret && "caret-transparent pointer-events-none select-none"
                 )}
             />
+
+            {/* Priority Badge (if set) */}
+            {data?.priority != null && (
+                <PriorityPopover
+                    value={data.priority as Priority}
+                    onChange={(priority) => data.onUpdateGroup?.({ priority })}
+                    trigger={
+                        <span className="nodrag nopan cursor-pointer shrink-0">
+                            <PriorityBadge value={data.priority as Priority} className="text-[10px] px-1.5 py-0.5" />
+                        </span>
+                    }
+                />
+            )}
+
+            {/* Date Display (if set) */}
+            {data?.scheduled_at && (
+                <DateTimePicker
+                    date={new Date(data.scheduled_at)}
+                    setDate={(date) => data.onUpdateGroup?.({ scheduled_at: date?.toISOString() || null })}
+                    trigger={
+                        <span className="nodrag nopan text-[10px] text-zinc-400 hover:text-zinc-200 cursor-pointer shrink-0 whitespace-nowrap">
+                            {new Date(data.scheduled_at).toLocaleDateString('ja-JP', { 
+                                month: 'numeric', 
+                                day: 'numeric', 
+                                hour: '2-digit', 
+                                minute: '2-digit' 
+                            })}
+                        </span>
+                    }
+                />
+            )}
+
+            {/* Collapse Button (right) */}
+            {data?.onToggleCollapse && data?.hasChildren && (
+                <button
+                    type="button"
+                    className="nodrag nopan ml-auto text-[10px] text-muted-foreground hover:text-foreground shrink-0"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        data.onToggleCollapse?.();
+                    }}
+                    aria-label={data?.collapsed ? 'Expand' : 'Collapse'}
+                >
+                    {data?.collapsed ? '>' : 'v'}
+                </button>
+            )}
+            
             <Handle type="source" position={Position.Right} className="!bg-muted-foreground" />
         </div>
     );
@@ -855,6 +929,7 @@ interface MindMapProps {
     groups: TaskGroup[]
     tasks: Task[]
     onUpdateGroupTitle: (groupId: string, newTitle: string) => void
+    onUpdateGroup?: (groupId: string, updates: Partial<TaskGroup>) => Promise<void>
     onCreateGroup?: (title: string) => void
     onDeleteGroup?: (groupId: string) => void
     onUpdateProject?: (projectId: string, title: string) => Promise<void>
@@ -864,7 +939,7 @@ interface MindMapProps {
     onMoveTask?: (taskId: string, newGroupId: string) => Promise<void>
 }
 
-function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGroup, onDeleteGroup, onUpdateProject, onCreateTask, onUpdateTask, onDeleteTask }: MindMapProps) {
+function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onUpdateGroup, onCreateGroup, onDeleteGroup, onUpdateProject, onCreateTask, onUpdateTask, onDeleteTask }: MindMapProps) {
     const reactFlow = useReactFlow();
     const projectId = project?.id ?? '';
     const USER_ACTION_WINDOW_MS = 800;
@@ -1532,13 +1607,21 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onCreateGr
             safeGroups.forEach((group) => {
                 const groupY = globalYOffset;
 
+                // Get all tasks in this group (for auto-complete logic)
+                const groupTasks = safeTasks.filter(t => t.group_id === group.id);
+
                 resultNodes.push({
                     id: group.id,
                     type: 'groupNode',
                     data: {
                         label: group.title ?? 'Group',
+                        priority: (group as any).priority,
+                        scheduled_at: (group as any).scheduled_at,
+                        tasks: groupTasks,
                         isSelected: selectedNodeIds.has(group.id),
                         onSave: (newTitle: string) => onUpdateGroupTitle?.(group.id, newTitle),
+                        onUpdateGroup: (updates: any) => onUpdateGroup?.(group.id, updates),
+                        onUpdateTask: onUpdateTask,
                         onDelete: () => onDeleteGroup?.(group.id),
                         hasChildren: hasGroupChildren(group.id),
                         collapsed: collapsedGroupIds.has(group.id),
