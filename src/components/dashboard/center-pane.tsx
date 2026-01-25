@@ -31,6 +31,7 @@ interface CenterPaneProps {
     groups: TaskGroup[]
     tasks: Task[]
     onUpdateGroupTitle?: (groupId: string, newTitle: string) => void
+    onUpdateGroup?: (groupId: string, updates: Partial<TaskGroup>) => Promise<void>
     onUpdateProject?: (projectId: string, title: string) => Promise<void>
     onCreateGroup?: (title: string) => void
     onDeleteGroup?: (groupId: string) => void
@@ -395,6 +396,7 @@ export function CenterPane({
     groups,
     tasks,
     onUpdateGroupTitle,
+    onUpdateGroup,
     onUpdateProject,
     onCreateGroup,
     onDeleteGroup,
@@ -546,66 +548,182 @@ export function CenterPane({
                                 const completedCount = allGroupTasks.filter(t => t.status === 'done').length
                                 const isCollapsed = collapsedGroups[group.id]
 
+                                // Auto-complete logic: Check if all tasks are completed
+                                const isGroupCompleted = allGroupTasks.length > 0 && allGroupTasks.every(t => t.status === 'done')
+                                
+                                // Calculate total elapsed time for all tasks in group
+                                const totalElapsedSeconds = allGroupTasks.reduce((acc, t) => acc + (t.total_elapsed_seconds ?? 0), 0)
+
+                                // Handle group checkbox toggle
+                                const handleGroupCheckToggle = async () => {
+                                    const newStatus = isGroupCompleted ? 'todo' : 'done'
+                                    // Update all tasks in group
+                                    for (const task of allGroupTasks) {
+                                        await onUpdateTask?.(task.id, { status: newStatus })
+                                    }
+                                }
+
                                 return (
                                     <div key={group.id} className="rounded-lg border bg-card overflow-hidden">
                                         {/* Group Header */}
-                                        <div
-                                            className="flex items-center gap-3 p-3 bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors"
-                                            onClick={() => toggleGroup(group.id)}
-                                        >
-                                            <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0 text-muted-foreground">
+                                        <div className="group flex items-center gap-2 p-2 bg-muted/30 hover:bg-muted/50 transition-colors">
+                                            {/* Checkbox (Auto-complete) */}
+                                            <button
+                                                className={cn(
+                                                    "w-5 h-5 rounded border flex items-center justify-center transition-colors shrink-0",
+                                                    isGroupCompleted ? "bg-primary border-primary text-primary-foreground" : "border-muted-foreground/30 hover:border-primary"
+                                                )}
+                                                onClick={handleGroupCheckToggle}
+                                                title={isGroupCompleted ? "グループを未完了に戻す" : "グループを完了"}
+                                            >
+                                                {isGroupCompleted && <Check className="w-3.5 h-3.5" />}
+                                            </button>
+
+                                            {/* Collapse/Expand Button */}
+                                            <Button 
+                                                variant="ghost" 
+                                                size="icon" 
+                                                className="h-5 w-5 shrink-0 text-muted-foreground"
+                                                onClick={() => toggleGroup(group.id)}
+                                            >
                                                 {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                                             </Button>
 
-                                            <div className="flex-1 min-w-0">
-                                                <div className="flex items-center justify-between">
-                                                    <input
-                                                        className="font-medium text-sm truncate bg-transparent border-none focus:outline-none focus:ring-0 px-0 min-w-0 flex-1"
-                                                        defaultValue={group.title}
-                                                        onClick={(e) => e.stopPropagation()}
-                                                        onBlur={(e) => {
-                                                            if (e.target.value !== group.title) {
-                                                                onUpdateGroupTitle?.(group.id, e.target.value)
-                                                            }
-                                                        }}
-                                                        onKeyDown={(e) => {
-                                                            if (e.nativeEvent.isComposing) return;
-                                                            if (e.key === 'Enter') {
-                                                                e.preventDefault();
-                                                                e.currentTarget.blur();
-                                                            }
-                                                        }}
-                                                    />
-                                                    <div className="flex items-center gap-4">
-                                                        <MiniProgress value={completedCount} total={allGroupTasks.length} />
-                                                        <DropdownMenu>
-                                                            <DropdownMenuTrigger asChild>
-                                                                <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground" onClick={(e) => e.stopPropagation()}>
-                                                                    <MoreHorizontal className="h-4 w-4" />
+                                            {/* Group Title */}
+                                            <input
+                                                className="font-medium text-sm bg-transparent border-none focus:outline-none focus:ring-0 px-1 min-w-0 flex-1"
+                                                defaultValue={group.title}
+                                                onBlur={(e) => {
+                                                    if (e.target.value !== group.title) {
+                                                        onUpdateGroupTitle?.(group.id, e.target.value)
+                                                    }
+                                                }}
+                                                onKeyDown={(e) => {
+                                                    if (e.nativeEvent.isComposing) return;
+                                                    if (e.key === 'Enter') {
+                                                        e.preventDefault();
+                                                        e.currentTarget.blur();
+                                                    }
+                                                }}
+                                            />
+
+                                            {/* Total Elapsed Time */}
+                                            {totalElapsedSeconds > 0 && (
+                                                <span className="text-xs font-mono tabular-nums text-muted-foreground px-1.5 py-0.5 rounded">
+                                                    <Timer className="inline w-3 h-3 mr-1" />
+                                                    {formatTime(totalElapsedSeconds)}
+                                                </span>
+                                            )}
+
+                                            {/* Progress */}
+                                            <MiniProgress value={completedCount} total={allGroupTasks.length} />
+
+                                            {/* Group Controls */}
+                                            <div className="flex items-center gap-3">
+                                                {/* Priority */}
+                                                <div className="flex items-center gap-1">
+                                                    {(group as any).priority ? (
+                                                        <>
+                                                            <PriorityPopover
+                                                                value={(group as any).priority as Priority}
+                                                                onChange={(priority) => onUpdateGroup?.(group.id, { priority } as any)}
+                                                                trigger={
+                                                                    <span className="cursor-pointer">
+                                                                        <PriorityBadge value={(group as any).priority as Priority} />
+                                                                    </span>
+                                                                }
+                                                            />
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="h-4 w-4 text-zinc-500 hover:text-red-400 transition-colors"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation()
+                                                                    onUpdateGroup?.(group.id, { priority: undefined } as any)
+                                                                }}
+                                                                title="優先度を削除"
+                                                            >
+                                                                <X className="w-3 h-3" />
+                                                            </Button>
+                                                        </>
+                                                    ) : (
+                                                        <PriorityPopover
+                                                            value={3}
+                                                            onChange={(priority) => onUpdateGroup?.(group.id, { priority } as any)}
+                                                            trigger={
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="h-6 w-6 text-zinc-500 hover:text-zinc-400 transition-colors opacity-0 group-hover:opacity-100"
+                                                                    title="優先度を設定"
+                                                                >
+                                                                    🎯
                                                                 </Button>
-                                                            </DropdownMenuTrigger>
-                                                            <DropdownMenuContent align="end">
-                                                                <DropdownMenuItem
-                                                                    onSelect={(e) => {
-                                                                        e.preventDefault(); // Keep dropdown open
-                                                                        handleAddTask(group.id);
-                                                                    }}
-                                                                >
-                                                                    <Plus className="w-3 h-3 mr-2" />
-                                                                    タスク追加
-                                                                </DropdownMenuItem>
-                                                                <DropdownMenuSeparator />
-                                                                <DropdownMenuItem
-                                                                    className="text-destructive focus:text-destructive"
-                                                                    onClick={() => onDeleteGroup?.(group.id)}
-                                                                >
-                                                                    <Trash2 className="w-3 h-3 mr-2" />
-                                                                    グループ削除
-                                                                </DropdownMenuItem>
-                                                            </DropdownMenuContent>
-                                                        </DropdownMenu>
-                                                    </div>
+                                                            }
+                                                        />
+                                                    )}
                                                 </div>
+
+                                                {/* Date */}
+                                                <div className="flex items-center gap-1">
+                                                    <DateTimePicker
+                                                        date={(group as any).scheduled_at ? new Date((group as any).scheduled_at) : undefined}
+                                                        setDate={(date) => onUpdateGroup?.(group.id, { scheduled_at: date ? date.toISOString() : null } as any)}
+                                                        trigger={
+                                                            (group as any).scheduled_at ? (
+                                                                <div className="flex items-center gap-1">
+                                                                    <span className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer">
+                                                                        {new Date((group as any).scheduled_at).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                                                    </span>
+                                                                    <Button
+                                                                        variant="ghost"
+                                                                        size="icon"
+                                                                        className="h-4 w-4 text-zinc-500 hover:text-red-400 transition-colors"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation()
+                                                                            onUpdateGroup?.(group.id, { scheduled_at: null } as any)
+                                                                        }}
+                                                                        title="日時設定を削除"
+                                                                    >
+                                                                        <X className="w-3 h-3" />
+                                                                    </Button>
+                                                                </div>
+                                                            ) : (
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="h-6 w-6 text-zinc-500 hover:text-zinc-400 transition-colors opacity-0 group-hover:opacity-100"
+                                                                    title="日時設定"
+                                                                >
+                                                                    <CalendarIcon className="w-4 h-4" />
+                                                                </Button>
+                                                            )
+                                                        }
+                                                    />
+                                                </div>
+
+                                                {/* Add Task Button */}
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="h-6 text-[10px] gap-1 opacity-0 group-hover:opacity-100"
+                                                    onClick={() => handleAddTask(group.id)}
+                                                    title="タスク追加"
+                                                >
+                                                    <Plus className="w-3 h-3" />
+                                                    追加
+                                                </Button>
+
+                                                {/* Delete Group Button */}
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-6 w-6 text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100"
+                                                    onClick={() => onDeleteGroup?.(group.id)}
+                                                    title="グループ削除"
+                                                >
+                                                    <Trash2 className="w-3 h-3" />
+                                                </Button>
                                             </div>
                                         </div>
 

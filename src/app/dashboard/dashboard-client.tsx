@@ -80,6 +80,7 @@ export function DashboardClient({
         tasks: currentTasks,
         createGroup,
         updateGroupTitle,
+        updateGroup,
         deleteGroup,
         createTask,
         updateTask,
@@ -198,6 +199,7 @@ export function DashboardClient({
                         groups={currentGroups}
                         tasks={currentTasks}
                         onUpdateGroupTitle={handleUpdateGroupTitle}
+                        onUpdateGroup={updateGroup}
                         onUpdateProject={handleUpdateProjectTitle}
                         onCreateGroup={handleCreateGroup}
                         onDeleteGroup={handleDeleteGroup}

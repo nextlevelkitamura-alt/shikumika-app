@@ -19,6 +19,7 @@ interface UseMindMapSyncReturn {
     tasks: Task[]
     createGroup: (title: string) => Promise<TaskGroup | null>
     updateGroupTitle: (groupId: string, newTitle: string) => Promise<void>
+    updateGroup: (groupId: string, updates: Partial<TaskGroup>) => Promise<void>
     deleteGroup: (groupId: string) => Promise<void>
     createTask: (groupId: string, title?: string, parentTaskId?: string | null) => Promise<Task | null>
     updateTask: (taskId: string, updates: Partial<Task>) => Promise<void>
@@ -86,6 +87,15 @@ export function useMindMapSync({
             await supabase.from('task_groups').update({ title }).eq('id', groupId)
         } catch (e) {
             console.error('[Sync] updateGroupTitle failed:', e)
+        }
+    }, [supabase])
+
+    const updateGroup = useCallback(async (groupId: string, updates: Partial<TaskGroup>) => {
+        setGroups(prev => prev.map(g => g.id === groupId ? { ...g, ...updates } : g))
+        try {
+            await supabase.from('task_groups').update(updates).eq('id', groupId)
+        } catch (e) {
+            console.error('[Sync] updateGroup failed:', e)
         }
     }, [supabase])
 
@@ -259,6 +269,7 @@ export function useMindMapSync({
         tasks,
         createGroup,
         updateGroupTitle,
+        updateGroup,
         deleteGroup,
         createTask,
         updateTask,
