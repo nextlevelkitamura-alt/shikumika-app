@@ -1,17 +1,18 @@
 "use client"
 
-import { useState, useRef, useEffect, useCallback } from "react"
+import { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import dynamic from "next/dynamic"
 import { Database } from "@/types/database"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
-import { MoreHorizontal, Play, Check, ChevronRight, ChevronDown, Plus, Trash2, Pause, RotateCcw, Timer, GripVertical, Calendar as CalendarIcon, X } from "lucide-react"
+import { MoreHorizontal, Play, Check, ChevronRight, ChevronDown, Plus, Trash2, Pause, Timer, GripVertical, Calendar as CalendarIcon, X, Target, Clock } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import { MindMap } from "./mind-map"
 import { useTimer, formatTime } from "@/contexts/TimerContext"
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd"
 import { PriorityBadge, PriorityPopover, Priority, getPriorityIconColor } from "@/components/ui/priority-select"
+import { EstimatedTimeBadge, EstimatedTimePopover, formatEstimatedTime } from "@/components/ui/estimated-time-select"
 
 // DateTimePicker を dynamic import（SSR を完全に無効化）
 const DateTimePicker = dynamic(
@@ -25,6 +26,68 @@ const DateTimePicker = dynamic(
 type Project = Database['public']['Tables']['projects']['Row']
 type TaskGroup = Database['public']['Tables']['task_groups']['Row']
 type Task = Database['public']['Tables']['tasks']['Row']
+
+type TaskIndex = {
+    byId: Map<string, Task>
+    childrenByParentId: Map<string, Task[]>
+    roots: Task[]
+}
+
+function buildTaskIndex(groupTasks: Task[]): TaskIndex {
+    const byId = new Map<string, Task>()
+    const childrenByParentId = new Map<string, Task[]>()
+    const roots: Task[] = []
+
+    for (const t of groupTasks) {
+        if (!t?.id) continue
+        byId.set(t.id, t)
+        if (t.parent_task_id) {
+            const arr = childrenByParentId.get(t.parent_task_id) ?? []
+            arr.push(t)
+            childrenByParentId.set(t.parent_task_id, arr)
+        } else {
+            roots.push(t)
+        }
+    }
+
+    for (const [k, arr] of childrenByParentId.entries()) {
+        arr.sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0))
+        childrenByParentId.set(k, arr)
+    }
+    roots.sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0))
+
+    return { byId, childrenByParentId, roots }
+}
+
+function getChildren(taskId: string, index: TaskIndex): Task[] {
+    return index.childrenByParentId.get(taskId) ?? []
+}
+
+// Effective minutes for a task subtree:
+// - leaf => own estimated_time
+// - parent with override (estimated_time > 0) => override value (descendants ignored)
+// - parent auto => sum of children's effective minutes
+function getTaskEffectiveMinutes(taskId: string, index: TaskIndex): number {
+    const self = index.byId.get(taskId)
+    if (!self) return 0
+    const children = getChildren(taskId, index)
+    if (children.length === 0) return self.estimated_time ?? 0
+
+    if ((self.estimated_time ?? 0) > 0) return self.estimated_time
+
+    return children.reduce((acc, child) => acc + getTaskEffectiveMinutes(child.id, index), 0)
+}
+
+// Auto minutes for a parent task (ignores the parent's own override)
+function getTaskAutoMinutes(taskId: string, index: TaskIndex): number {
+    const children = getChildren(taskId, index)
+    if (children.length === 0) return index.byId.get(taskId)?.estimated_time ?? 0
+    return children.reduce((acc, child) => acc + getTaskEffectiveMinutes(child.id, index), 0)
+}
+
+function getGroupAutoMinutes(index: TaskIndex): number {
+    return index.roots.reduce((acc, root) => acc + getTaskEffectiveMinutes(root.id, index), 0)
+}
 
 interface CenterPaneProps {
     project?: Project
@@ -58,6 +121,7 @@ function MiniProgress({ value, total }: { value: number, total: number }) {
 function TaskItem({
     task,
     allTasks,
+    taskIndex,
     depth = 0,
     onUpdateTask,
     onDeleteTask,
@@ -67,6 +131,7 @@ function TaskItem({
 }: {
     task: Task
     allTasks: Task[]
+    taskIndex: TaskIndex
     depth?: number
     onUpdateTask?: (taskId: string, updates: Partial<Task>) => Promise<void>
     onDeleteTask?: (taskId: string) => Promise<void>
@@ -89,11 +154,17 @@ function TaskItem({
     const safeTasks = (allTasks ?? []).filter(t => t && t.id);
 
     // Get child tasks
-    const childTasks = safeTasks.filter(t => t.parent_task_id === task.id).sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0))
+    const childTasks = getChildren(task.id, taskIndex)
     const hasChildren = childTasks.length > 0
 
     // Calculate progress for parent tasks
     const completedChildren = childTasks.filter(t => t.status === 'done').length
+
+    const isEstimatedOverride = hasChildren && (task.estimated_time ?? 0) > 0
+    const autoEstimatedMinutes = hasChildren ? getTaskAutoMinutes(task.id, taskIndex) : 0
+    const displayEstimatedMinutes = hasChildren
+        ? (isEstimatedOverride ? (task.estimated_time ?? 0) : autoEstimatedMinutes)
+        : (task.estimated_time ?? 0)
 
     const handleAddChildTask = async () => {
         if (onCreateTask) {
@@ -183,79 +254,172 @@ function TaskItem({
 
                 {/* Timer & Date Controls */}
                 <div className="flex items-center gap-3">
-                    {/* Group 1: Timer Info */}
-                    <div className="flex items-center gap-2">
-                        {/* Time Display */}
-                        {(taskElapsedSeconds > 0 || isTimerRunning) && (
-                            <span className={cn(
-                                "text-xs font-mono tabular-nums px-1.5 py-0.5 rounded",
-                                isTimerRunning ? "bg-primary/10 text-primary" : "text-muted-foreground"
-                            )}>
-                                <Timer className="inline w-3 h-3 mr-1" />
-                                {formatTime(taskElapsedSeconds)}
-                            </span>
-                        )}
-
-                        {/* Focus Button */}
+                    {/* Timer Controls */}
+                    <div className="flex items-center gap-1">
                         {isTimerRunning ? (
-                            /* Running State: Pause / Complete / Interrupt */
-                            <>
+                            /* 実行中: コンパクトに統合 */
+                            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-primary/10 border border-primary/20">
+                                {/* 時間表示 */}
+                                <span className="text-[10px] font-mono text-primary tabular-nums">
+                                    <Timer className="inline w-3 h-3 mr-0.5" />
+                                    {formatTime(taskElapsedSeconds)}
+                                </span>
+                                
+                                {/* 区切り線 */}
+                                <div className="h-3 w-px bg-primary/20 mx-0.5" />
+                                
+                                {/* 一時停止ボタン */}
                                 <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="h-6 w-6 text-amber-500 hover:bg-amber-500/10"
+                                    className="h-4 w-4 text-amber-500 hover:bg-amber-500/10 p-0"
                                     onClick={() => pauseTimer()}
                                     disabled={isLoading}
                                     title="一時停止"
                                 >
-                                    <Pause className="w-3.5 h-3.5" />
+                                    <Pause className="w-3 h-3" />
                                 </Button>
+                                
+                                {/* 完了ボタン */}
                                 <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="h-6 w-6 text-green-500 hover:bg-green-500/10"
+                                    className="h-4 w-4 text-green-500 hover:bg-green-500/10 p-0"
                                     onClick={() => completeTimer()}
                                     disabled={isLoading}
                                     title="完了"
                                 >
-                                    <Check className="w-3.5 h-3.5" />
+                                    <Check className="w-3 h-3" />
                                 </Button>
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-6 w-6 text-muted-foreground hover:bg-muted/50"
-                                    onClick={() => interruptTimer()}
-                                    disabled={isLoading}
-                                    title="中断・戻る"
-                                >
-                                    <RotateCcw className="w-3.5 h-3.5" />
-                                </Button>
-                            </>
+                            </div>
                         ) : (
-                            /* Stopped State: Play button */
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                className={cn(
-                                    "h-6 text-[10px] gap-1",
-                                    runningTaskId && runningTaskId !== task.id
-                                        ? "border-amber-500/50 text-amber-600 hover:bg-amber-500/10"
-                                        : "hover:bg-primary hover:text-primary-foreground"
+                            /* 停止中 */
+                            <>
+                                {taskElapsedSeconds > 0 ? (
+                                    /* 記録時間あり: 統合ボタン + 削除ボタン（ホバーで▶と×出現） */
+                                    <div className="group flex items-center gap-0.5">
+                                        {/* クリックで再開 */}
+                                        <button
+                                            className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono text-muted-foreground hover:bg-muted/30 hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                            onClick={() => startTimer(task)}
+                                            disabled={isLoading || task.status === 'done'}
+                                            title="クリックでタイマー再開"
+                                        >
+                                            <Timer className="w-3 h-3" />
+                                            <span className="tabular-nums">{formatTime(taskElapsedSeconds)}</span>
+                                            
+                                            {/* 再開アイコン（ホバー時のみ表示） */}
+                                            <Play className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 transition-opacity ml-0.5" />
+                                        </button>
+                                        
+                                        {/* 削除ボタン（ホバー時のみ表示） */}
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-4 w-4 p-0 opacity-0 group-hover:opacity-100 transition-opacity text-zinc-500 hover:text-red-400"
+                                            onClick={(e) => {
+                                                e.stopPropagation()
+                                                onUpdateTask?.(task.id, { total_elapsed_seconds: 0 })
+                                            }}
+                                            disabled={isLoading}
+                                            title="タイマー記録を削除"
+                                        >
+                                            <X className="w-3 h-3" />
+                                        </Button>
+                                    </div>
+                                ) : (
+                                    /* 記録時間なし: Focusボタン（再生マーク + "Focus"テキスト） */
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className={cn(
+                                            "h-6 px-2 gap-1 text-[10px]",
+                                            runningTaskId && runningTaskId !== task.id
+                                                ? "border-amber-500/50 text-amber-600 hover:bg-amber-500/10"
+                                                : "hover:bg-primary hover:text-primary-foreground"
+                                        )}
+                                        onClick={() => startTimer(task)}
+                                        disabled={isLoading || task.status === 'done'}
+                                        title={runningTaskId && runningTaskId !== task.id ? "別タスクで計測中（切替可能）" : "タイマー開始"}
+                                    >
+                                        <Play className="w-3 h-3" />
+                                        <span>Focus</span>
+                                    </Button>
                                 )}
-                                onClick={() => startTimer(task)}
-                                disabled={isLoading || task.status === 'done'}
-                                title={runningTaskId && runningTaskId !== task.id ? "別タスクで計測中（切替可能）" : "タイマー開始"}
-                            >
-                                <Play className="w-2.5 h-2.5" />
-                                {runningTaskId && runningTaskId !== task.id ? "切替" : "フォーカス"}
-                            </Button>
+                            </>
+                        )}
+                    </div>
+
+                    {/* Group 1.5: Estimated Time */}
+                    <div className="flex items-center gap-1">
+                        {displayEstimatedMinutes > 0 ? (
+                            <div className="group/estimated flex items-center gap-0.5">
+                                <EstimatedTimePopover
+                                    valueMinutes={displayEstimatedMinutes}
+                                    onChangeMinutes={(minutes) => onUpdateTask?.(task.id, { estimated_time: minutes })}
+                                    isOverridden={isEstimatedOverride}
+                                    autoMinutes={hasChildren ? autoEstimatedMinutes : undefined}
+                                    onResetAuto={hasChildren ? () => onUpdateTask?.(task.id, { estimated_time: 0 }) : undefined}
+                                    trigger={
+                                        <span
+                                            className="cursor-pointer"
+                                            onClick={(e) => e.stopPropagation()}
+                                        >
+                                            <EstimatedTimeBadge
+                                                minutes={displayEstimatedMinutes}
+                                                title={
+                                                    hasChildren
+                                                        ? (isEstimatedOverride
+                                                            ? `手動設定（自動集計: ${autoEstimatedMinutes > 0 ? formatEstimatedTime(autoEstimatedMinutes) : "0分"}）`
+                                                            : `子孫合計: ${formatEstimatedTime(displayEstimatedMinutes)}`)
+                                                        : `見積もり: ${formatEstimatedTime(displayEstimatedMinutes)}`
+                                                }
+                                            />
+                                        </span>
+                                    }
+                                />
+
+                                {/* Clear (leaf) / Reset (parent override) - ホバー時のみ表示 */}
+                                {(!hasChildren || isEstimatedOverride) && (
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-4 w-4 p-0 opacity-0 group-hover/estimated:opacity-100 transition-opacity text-zinc-500 hover:text-red-400"
+                                        onClick={(e) => {
+                                            e.stopPropagation()
+                                            onUpdateTask?.(task.id, { estimated_time: 0 })
+                                        }}
+                                        title={hasChildren ? "自動集計に戻す" : "見積もり時間を削除"}
+                                    >
+                                        <X className="w-3 h-3" />
+                                    </Button>
+                                )}
+                            </div>
+                        ) : (
+                            <EstimatedTimePopover
+                                valueMinutes={0}
+                                onChangeMinutes={(minutes) => onUpdateTask?.(task.id, { estimated_time: minutes })}
+                                isOverridden={false}
+                                autoMinutes={hasChildren ? autoEstimatedMinutes : undefined}
+                                trigger={
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-6 w-6 text-zinc-500 hover:text-zinc-400 opacity-0 group-hover:opacity-100"
+                                        title={hasChildren ? "見積もり（親タスク上書き）" : "見積もり時間を設定"}
+                                        onClick={(e) => e.stopPropagation()}
+                                    >
+                                        <Clock className="w-4 h-4" />
+                                    </Button>
+                                }
+                            />
                         )}
                     </div>
 
                     {/* Group 2: Priority */}
                     <div className="flex items-center gap-1">
                         {task.priority ? (
-                            <>
+                            <div className="group/priority flex items-center gap-0.5">
                                 {/* Priority Badge (clickable) */}
                                 <PriorityPopover
                                     value={task.priority as Priority}
@@ -267,11 +431,11 @@ function TaskItem({
                                     }
                                 />
                                 
-                                {/* Clear Button */}
+                                {/* Clear Button - ホバー時のみ表示 */}
                                 <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="h-4 w-4 text-zinc-500 hover:text-red-400 transition-colors"
+                                    className="h-4 w-4 p-0 opacity-0 group-hover/priority:opacity-100 transition-opacity text-zinc-500 hover:text-red-400"
                                     onClick={(e) => {
                                         e.stopPropagation()
                                         onUpdateTask?.(task.id, { priority: undefined as any })
@@ -280,7 +444,7 @@ function TaskItem({
                                 >
                                     <X className="w-3 h-3" />
                                 </Button>
-                            </>
+                            </div>
                         ) : (
                             /* Priority not set: Icon only (gray) */
                             <PriorityPopover
@@ -293,7 +457,7 @@ function TaskItem({
                                         className="h-6 w-6 text-zinc-500 hover:text-zinc-400 transition-colors opacity-0 group-hover:opacity-100"
                                         title="優先度を設定"
                                     >
-                                        🎯
+                                        <Target className="w-4 h-4" />
                                     </Button>
                                 }
                             />
@@ -302,33 +466,39 @@ function TaskItem({
 
                     {/* Group 3: Date Info */}
                     <div className="flex items-center gap-1">
-                        <DateTimePicker
-                            date={task.scheduled_at ? new Date(task.scheduled_at) : undefined}
-                            setDate={(date) => onUpdateTask?.(task.id, { scheduled_at: date ? date.toISOString() : null })}
-                            trigger={
-                                task.scheduled_at ? (
-                                    <div className="flex items-center gap-1">
-                                        {/* Date Text (clickable) */}
+                        {task.scheduled_at ? (
+                            <div className="group/datetime flex items-center gap-0.5">
+                                {/* Date Text (clickable) */}
+                                <DateTimePicker
+                                    date={new Date(task.scheduled_at)}
+                                    setDate={(date) => onUpdateTask?.(task.id, { scheduled_at: date ? date.toISOString() : null })}
+                                    trigger={
                                         <span className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer">
                                             {new Date(task.scheduled_at).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                         </span>
-                                        
-                                        {/* Clear Button */}
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-4 w-4 text-zinc-500 hover:text-red-400 transition-colors"
-                                            onClick={(e) => {
-                                                e.stopPropagation()
-                                                onUpdateTask?.(task.id, { scheduled_at: null })
-                                            }}
-                                            title="日時設定を削除"
-                                        >
-                                            <X className="w-3 h-3" />
-                                        </Button>
-                                    </div>
-                                ) : (
-                                    /* Date not set: Calendar icon only */
+                                    }
+                                />
+                                
+                                {/* Clear Button - ホバー時のみ表示 */}
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-4 w-4 p-0 opacity-0 group-hover/datetime:opacity-100 transition-opacity text-zinc-500 hover:text-red-400"
+                                    onClick={(e) => {
+                                        e.stopPropagation()
+                                        onUpdateTask?.(task.id, { scheduled_at: null })
+                                    }}
+                                    title="日時設定を削除"
+                                >
+                                    <X className="w-3 h-3" />
+                                </Button>
+                            </div>
+                        ) : (
+                            /* Date not set: Calendar icon only */
+                            <DateTimePicker
+                                date={undefined}
+                                setDate={(date) => onUpdateTask?.(task.id, { scheduled_at: date ? date.toISOString() : null })}
+                                trigger={
                                     <Button
                                         variant="ghost"
                                         size="icon"
@@ -337,35 +507,35 @@ function TaskItem({
                                     >
                                         <CalendarIcon className="w-4 h-4" />
                                     </Button>
-                                )
-                            }
-                        />
+                                }
+                            />
+                        )}
                     </div>
 
                     {/* Group 4: Other Actions (Hover) */}
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {canAddChildren && (
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-6 w-6 text-muted-foreground hover:text-primary"
-                                onClick={handleAddChildTask}
-                                title="サブタスク追加"
-                            >
-                                <Plus className="w-3 h-3" />
-                            </Button>
-                        )}
-
-                        {/* Direct Delete Button */}
+                    {canAddChildren && (
                         <Button
                             variant="ghost"
                             size="icon"
-                            className="h-6 w-6 text-destructive hover:bg-destructive/10"
-                            onClick={() => onDeleteTask?.(task.id)}
-                            title="削除"
+                            className="h-6 w-6 text-muted-foreground hover:text-primary"
+                            onClick={handleAddChildTask}
+                            title="サブタスク追加"
                         >
-                            <Trash2 className="w-3 h-3" />
+                            <Plus className="w-3 h-3" />
                         </Button>
+                    )}
+
+                    {/* Direct Delete Button */}
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 text-destructive hover:bg-destructive/10"
+                        onClick={() => onDeleteTask?.(task.id)}
+                        title="削除"
+                    >
+                        <Trash2 className="w-3 h-3" />
+                    </Button>
                     </div>
                 </div>
             </div>
@@ -378,6 +548,7 @@ function TaskItem({
                             key={child.id}
                             task={child}
                             allTasks={allTasks}
+                            taskIndex={taskIndex}
                             depth={depth + 1}
                             onUpdateTask={onUpdateTask}
                             onDeleteTask={onDeleteTask}
@@ -416,6 +587,16 @@ export function CenterPane({
     const toggleGroup = (groupId: string) => {
         setCollapsedGroups(prev => ({ ...prev, [groupId]: !prev[groupId] }))
     }
+
+    // Build indices for estimated-time aggregation (by group)
+    const taskIndexByGroupId = useMemo(() => {
+        const map = new Map<string, TaskIndex>()
+        for (const g of groups) {
+            const groupTasks = tasks.filter(t => t.group_id === g.id)
+            map.set(g.id, buildTaskIndex(groupTasks))
+        }
+        return map
+    }, [groups, tasks])
 
     const handleAddTask = async (groupId: string) => {
         if (onCreateTask) await onCreateTask(groupId, "New Task", null)
@@ -546,6 +727,10 @@ export function CenterPane({
 
                                 // Get all tasks in this group for progress calculation
                                 const allGroupTasks = tasks.filter(t => t.group_id === group.id)
+                                const groupIndex = taskIndexByGroupId.get(group.id) ?? buildTaskIndex(allGroupTasks)
+                                const groupAutoMinutes = getGroupAutoMinutes(groupIndex)
+                                const groupIsOverridden = group.estimated_time != null
+                                const groupDisplayMinutes = groupIsOverridden ? (group.estimated_time ?? 0) : groupAutoMinutes
                                 const completedCount = allGroupTasks.filter(t => t.status === 'done').length
                                 const isCollapsed = collapsedGroups[group.id]
 
@@ -585,28 +770,28 @@ export function CenterPane({
                                                 variant="ghost" 
                                                 size="icon" 
                                                 className="h-5 w-5 shrink-0 text-muted-foreground"
-                                                onClick={() => toggleGroup(group.id)}
-                                            >
+                                            onClick={() => toggleGroup(group.id)}
+                                        >
                                                 {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                                             </Button>
 
                                             {/* Group Title */}
-                                            <input
+                                                    <input
                                                 className="font-medium text-sm bg-transparent border-none focus:outline-none focus:ring-0 px-1 min-w-0 flex-1"
-                                                defaultValue={group.title}
-                                                onBlur={(e) => {
-                                                    if (e.target.value !== group.title) {
-                                                        onUpdateGroupTitle?.(group.id, e.target.value)
-                                                    }
-                                                }}
-                                                onKeyDown={(e) => {
-                                                    if (e.nativeEvent.isComposing) return;
-                                                    if (e.key === 'Enter') {
-                                                        e.preventDefault();
-                                                        e.currentTarget.blur();
-                                                    }
-                                                }}
-                                            />
+                                                        defaultValue={group.title}
+                                                        onBlur={(e) => {
+                                                            if (e.target.value !== group.title) {
+                                                                onUpdateGroupTitle?.(group.id, e.target.value)
+                                                            }
+                                                        }}
+                                                        onKeyDown={(e) => {
+                                                            if (e.nativeEvent.isComposing) return;
+                                                            if (e.key === 'Enter') {
+                                                                e.preventDefault();
+                                                                e.currentTarget.blur();
+                                                            }
+                                                        }}
+                                                    />
 
                                             {/* Total Elapsed Time */}
                                             {totalElapsedSeconds > 0 && (
@@ -617,20 +802,82 @@ export function CenterPane({
                                             )}
 
                                             {/* Progress */}
-                                            <MiniProgress value={completedCount} total={allGroupTasks.length} />
+                                                        <MiniProgress value={completedCount} total={allGroupTasks.length} />
 
                                             {/* Group Controls */}
                                             <div className="flex items-center gap-3">
+                                                {/* Estimated Time (Group total; auto + manual override) */}
+                                                <div className="flex items-center gap-1">
+                                                    {groupDisplayMinutes > 0 ? (
+                                                        <div className="group/estimated flex items-center gap-0.5">
+                                                            <EstimatedTimePopover
+                                                                valueMinutes={groupDisplayMinutes}
+                                                                onChangeMinutes={(minutes) => onUpdateGroup?.(group.id, { estimated_time: minutes })}
+                                                                isOverridden={groupIsOverridden}
+                                                                autoMinutes={groupAutoMinutes}
+                                                                onResetAuto={() => onUpdateGroup?.(group.id, { estimated_time: null })}
+                                                                trigger={
+                                                                    <span
+                                                                        className="cursor-pointer"
+                                                                        onClick={(e) => e.stopPropagation()}
+                                                                    >
+                                                                        <EstimatedTimeBadge
+                                                                            minutes={groupDisplayMinutes}
+                                                                            title={
+                                                                                groupIsOverridden
+                                                                                    ? `手動設定（自動集計: ${groupAutoMinutes > 0 ? formatEstimatedTime(groupAutoMinutes) : "0分"}）`
+                                                                                    : `自動集計（全階層）: ${formatEstimatedTime(groupAutoMinutes)}`
+                                                                            }
+                                                                        />
+                                                                    </span>
+                                                                }
+                                                            />
+                                                            {groupIsOverridden && (
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="h-4 w-4 p-0 opacity-0 group-hover/estimated:opacity-100 transition-opacity text-zinc-500 hover:text-red-400"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation()
+                                                                        onUpdateGroup?.(group.id, { estimated_time: null })
+                                                                    }}
+                                                                    title="自動集計に戻す"
+                                                                >
+                                                                    <X className="w-3 h-3" />
+                                                                </Button>
+                                                            )}
+                                                        </div>
+                                                    ) : (
+                                                        <EstimatedTimePopover
+                                                            valueMinutes={0}
+                                                            onChangeMinutes={(minutes) => onUpdateGroup?.(group.id, { estimated_time: minutes })}
+                                                            isOverridden={false}
+                                                            autoMinutes={groupAutoMinutes}
+                                                            trigger={
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="h-6 w-6 text-zinc-500 hover:text-zinc-400 transition-colors opacity-0 group-hover:opacity-100"
+                                                                    title="見積もり（グループ上書き）"
+                                                                    onClick={(e) => e.stopPropagation()}
+                                                                >
+                                                                    <Clock className="w-4 h-4" />
+                                                                </Button>
+                                                            }
+                                                        />
+                                                    )}
+                                                </div>
+
                                                 {/* Priority */}
                                                 <div className="flex items-center gap-1">
-                                                    {(group as any).priority ? (
+                                                    {group.priority != null ? (
                                                         <>
                                                             <PriorityPopover
-                                                                value={(group as any).priority as Priority}
+                                                                value={group.priority as Priority}
                                                                 onChange={(priority) => onUpdateGroup?.(group.id, { priority } as any)}
                                                                 trigger={
                                                                     <span className="cursor-pointer">
-                                                                        <PriorityBadge value={(group as any).priority as Priority} />
+                                                                        <PriorityBadge value={group.priority as Priority} />
                                                                     </span>
                                                                 }
                                                             />
@@ -658,7 +905,7 @@ export function CenterPane({
                                                                     className="h-6 w-6 text-zinc-500 hover:text-zinc-400 transition-colors opacity-0 group-hover:opacity-100"
                                                                     title="優先度を設定"
                                                                 >
-                                                                    🎯
+                                                                    <Target className="w-4 h-4" />
                                                                 </Button>
                                                             }
                                                         />
@@ -668,13 +915,13 @@ export function CenterPane({
                                                 {/* Date */}
                                                 <div className="flex items-center gap-1">
                                                     <DateTimePicker
-                                                        date={(group as any).scheduled_at ? new Date((group as any).scheduled_at) : undefined}
+                                                        date={group.scheduled_at ? new Date(group.scheduled_at) : undefined}
                                                         setDate={(date) => onUpdateGroup?.(group.id, { scheduled_at: date ? date.toISOString() : null } as any)}
                                                         trigger={
-                                                            (group as any).scheduled_at ? (
+                                                            group.scheduled_at ? (
                                                                 <div className="flex items-center gap-1">
                                                                     <span className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer">
-                                                                        {new Date((group as any).scheduled_at).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                                                        {new Date(group.scheduled_at).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                                                     </span>
                                                                     <Button
                                                                         variant="ghost"
@@ -750,6 +997,7 @@ export function CenterPane({
                                                                         <TaskItem
                                                                             task={task}
                                                                             allTasks={allGroupTasks}
+                                                                            taskIndex={groupIndex}
                                                                             onUpdateTask={onUpdateTask}
                                                                             onDeleteTask={onDeleteTask}
                                                                             onCreateTask={onCreateTask}

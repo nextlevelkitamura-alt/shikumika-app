@@ -53,7 +53,7 @@ git push -u origin develop
 
 #### 2-1. Vercel Dashboardにアクセス
 
-🔗 **直接リンク**: https://vercel.com/dashboard
+🔗 **直接リンク**: 🔗 **直接リンク**: https://vercel.com/dashboardhttps://vercel.com/dashboard
 
 1. プロジェクト `shikumika-app` を選択
 2. **Settings** タブをクリック

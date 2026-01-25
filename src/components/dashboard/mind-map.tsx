@@ -20,8 +20,10 @@ import 'reactflow/dist/style.css';
 import dagre from 'dagre';
 import { Database } from "@/types/database";
 import { cn } from "@/lib/utils";
-import { Calendar as CalendarIcon, X } from "lucide-react";
+import { Calendar as CalendarIcon, X, Target, Clock, Check } from "lucide-react";
 import { PriorityBadge, PriorityPopover, Priority, getPriorityIconColor } from "@/components/ui/priority-select";
+import { EstimatedTimeBadge, EstimatedTimePopover, formatEstimatedTime } from "@/components/ui/estimated-time-select";
+import { MindMapDisplaySettingsPopover, MindMapDisplaySettings, loadSettings } from "@/components/dashboard/mindmap-display-settings";
 
 // DateTimePicker を dynamic import（SSR を完全に無効化）
 const DateTimePicker = dynamic(
@@ -203,8 +205,8 @@ const ProjectNode = React.memo(({ data, selected }: NodeProps) => {
                 setIsEditing(true);
                 if (inputRef.current) {
                     inputRef.current.setSelectionRange(0, inputRef.current.value.length);
-                }
-                return;
+            }
+            return;
             }
         }
 
@@ -321,6 +323,8 @@ const GroupNode = React.memo(({ data, selected }: NodeProps) => {
     const [isEditing, setIsEditing] = useState(false);
     const [editValue, setEditValue] = useState(data?.label ?? '');
     const [showCaret, setShowCaret] = useState(false);
+    
+    const settings = data?.displaySettings || { showStatus: true, showPriority: true, showScheduledAt: true, showEstimatedTime: true, showProgress: true, showCollapseButton: true };
 
     // Auto-complete logic: Check if all tasks are completed
     const isGroupCompleted = useMemo(() => {
@@ -363,7 +367,7 @@ const GroupNode = React.memo(({ data, selected }: NodeProps) => {
             inputRef.current.focus();
             if (!isEditing) {
                 setShowCaret(false);
-            }
+                }
         }
     }, [selected, isEditing]);
 
@@ -377,7 +381,7 @@ const GroupNode = React.memo(({ data, selected }: NodeProps) => {
     const handleInputKeyDown = useCallback(async (e: React.KeyboardEvent<HTMLInputElement>) => {
         e.stopPropagation();
         if (!isEditing && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-            setIsEditing(true);
+                setIsEditing(true);
             setShowCaret(true);
             if (inputRef.current) {
                 inputRef.current.setSelectionRange(0, inputRef.current.value.length);
@@ -447,7 +451,7 @@ const GroupNode = React.memo(({ data, selected }: NodeProps) => {
         <div
             ref={wrapperRef}
             className={cn(
-                "w-auto min-w-[240px] max-w-[320px] px-3 py-2 rounded-lg bg-card border text-sm font-medium shadow transition-all outline-none min-h-[40px] flex items-center gap-2",
+                "group w-auto min-w-[240px] max-w-[320px] px-3 py-2 rounded-lg bg-card border text-sm font-medium shadow transition-all outline-none min-h-[40px] flex items-center gap-2",
                 selected && "ring-2 ring-white ring-offset-2 ring-offset-background",
                 data?.isDropTarget && "ring-2 ring-sky-400 ring-offset-2 ring-offset-background"
             )}
@@ -458,29 +462,31 @@ const GroupNode = React.memo(({ data, selected }: NodeProps) => {
             <Handle type="target" position={Position.Left} className="!bg-muted-foreground" />
             
             {/* Checkbox (left) */}
-            <button
-                type="button"
-                className={cn(
-                    "nodrag nopan w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors",
-                    isGroupCompleted 
-                        ? "bg-primary border-primary text-primary-foreground" 
-                        : "border-muted-foreground/30 hover:border-primary"
-                )}
-                onClick={handleGroupCheckToggle}
-                title={isGroupCompleted ? "グループを未完了に戻す" : "グループを完了"}
-            >
-                {isGroupCompleted && (
-                    <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                        <polyline points="20 6 9 17 4 12"></polyline>
-                    </svg>
-                )}
-            </button>
+            {settings.showStatus && (
+                <button
+                    type="button"
+                    className={cn(
+                        "nodrag nopan w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors",
+                        isGroupCompleted 
+                            ? "bg-primary border-primary text-primary-foreground" 
+                            : "border-muted-foreground/30 hover:border-primary"
+                    )}
+                    onClick={handleGroupCheckToggle}
+                    title={isGroupCompleted ? "グループを未完了に戻す" : "グループを完了"}
+                >
+                    {isGroupCompleted && (
+                        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                    )}
+                </button>
+            )}
 
             {/* Group Name */}
             <textarea
                 ref={inputRef as any}
                 rows={1}
-                value={editValue}
+                    value={editValue}
                 onChange={(e) => {
                     if (!isEditing) {
                         setIsEditing(true);
@@ -490,7 +496,7 @@ const GroupNode = React.memo(({ data, selected }: NodeProps) => {
                     e.target.style.height = 'auto';
                     e.target.style.height = `${e.target.scrollHeight}px`;
                 }}
-                onBlur={handleInputBlur}
+                    onBlur={handleInputBlur}
                 onKeyDown={handleInputKeyDown as any}
                 onClick={(e) => {
                     if (isEditing) e.stopPropagation();
@@ -501,14 +507,75 @@ const GroupNode = React.memo(({ data, selected }: NodeProps) => {
                         setShowCaret(true);
                     }
                 }}
-                className={cn(
+                    className={cn(
                     "nodrag nopan flex-1 bg-transparent border-none text-sm text-center focus:outline-none focus:ring-0 resize-none overflow-hidden min-w-0",
                     !showCaret && "caret-transparent pointer-events-none select-none"
                 )}
             />
 
+            {/* Estimated Time (Group) */}
+            {settings.showEstimatedTime && (
+                <>
+                    {(data?.estimatedDisplayMinutes ?? 0) > 0 ? (
+                        <div className="nodrag nopan flex items-center gap-1 shrink-0">
+                            <EstimatedTimePopover
+                                valueMinutes={data.estimatedDisplayMinutes}
+                                onChangeMinutes={(minutes) => data.onUpdateGroup?.({ estimated_time: minutes })}
+                                isOverridden={!!data?.estimatedIsOverride}
+                                autoMinutes={data?.estimatedAutoMinutes}
+                                onResetAuto={() => data.onUpdateGroup?.({ estimated_time: null })}
+                                trigger={
+                                    <span
+                                        className="cursor-pointer"
+                                        onClick={(e) => e.stopPropagation()}
+                                    >
+                                        <EstimatedTimeBadge
+                                            minutes={data.estimatedDisplayMinutes}
+                                            className="text-[10px] px-1.5 py-0.5"
+                                            title={
+                                                data?.estimatedIsOverride
+                                                    ? `手動設定（自動集計: ${data.estimatedAutoMinutes ? formatEstimatedTime(data.estimatedAutoMinutes) : "0分"}）`
+                                                    : `自動集計（全階層）: ${data.estimatedAutoMinutes ? formatEstimatedTime(data.estimatedAutoMinutes) : "0分"}`
+                                            }
+                                        />
+                                    </span>
+                                }
+                            />
+                            {data?.estimatedIsOverride && (
+                                <button
+                                    className="p-0.5 rounded text-zinc-500 hover:text-red-400 transition-colors"
+                                    onClick={(e) => {
+                                        e.stopPropagation()
+                                        data.onUpdateGroup?.({ estimated_time: null })
+                                    }}
+                                    title="自動集計に戻す"
+                                >
+                                    <X className="w-2.5 h-2.5" />
+                                </button>
+                            )}
+                        </div>
+                    ) : (
+                        <EstimatedTimePopover
+                            valueMinutes={0}
+                            onChangeMinutes={(minutes) => data.onUpdateGroup?.({ estimated_time: minutes })}
+                            isOverridden={false}
+                            autoMinutes={data?.estimatedAutoMinutes}
+                            trigger={
+                        <button
+                            className="nodrag nopan p-0.5 rounded text-zinc-500 hover:text-zinc-400 transition-colors text-xs opacity-0 group-hover:opacity-100"
+                            title="見積もり（グループ上書き）"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <Clock className="w-3.5 h-3.5" />
+                        </button>
+                            }
+                        />
+                    )}
+                </>
+            )}
+
             {/* Priority Badge (if set) */}
-            {data?.priority != null && (
+            {settings.showPriority && data?.priority != null && (
                 <PriorityPopover
                     value={data.priority as Priority}
                     onChange={(priority) => data.onUpdateGroup?.({ priority })}
@@ -521,7 +588,7 @@ const GroupNode = React.memo(({ data, selected }: NodeProps) => {
             )}
 
             {/* Date Display (if set) */}
-            {data?.scheduled_at && (
+            {settings.showScheduledAt && data?.scheduled_at && (
                 <DateTimePicker
                     date={new Date(data.scheduled_at)}
                     setDate={(date) => data.onUpdateGroup?.({ scheduled_at: date?.toISOString() || null })}
@@ -539,7 +606,7 @@ const GroupNode = React.memo(({ data, selected }: NodeProps) => {
             )}
 
             {/* Collapse Button (right) */}
-            {data?.onToggleCollapse && data?.hasChildren && (
+            {settings.showCollapseButton && data?.onToggleCollapse && data?.hasChildren && (
                 <button
                     type="button"
                     className="nodrag nopan ml-auto text-[10px] text-muted-foreground hover:text-foreground shrink-0"
@@ -564,6 +631,7 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
     const inputRef = useRef<HTMLInputElement>(null);
     const wrapperRef = useRef<HTMLDivElement>(null);
     const [isEditing, setIsEditing] = useState<boolean>(false);
+    const [isConfirmed, setIsConfirmed] = useState<boolean>(false); // 確定待ち状態（3段階目）
     const [editValue, setEditValue] = useState<string>(data?.label ?? '');
     const [showCaret, setShowCaret] = useState<boolean>(false);
 
@@ -600,6 +668,9 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
             if (!isEditing) {
                 setShowCaret(false);
             }
+        } else {
+            // 選択が外れたら確定待ち状態をリセット
+            setIsConfirmed(false);
         }
     }, [selected, isEditing]);
 
@@ -629,14 +700,16 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
         e.stopPropagation();
 
         if (!isEditing) {
-            // Selection Mode behaviors (input is focused for IME-friendly first key)
+            // Selection Mode & Confirmed Mode behaviors (input is focused for IME-friendly first key)
             if (e.key === 'Tab') {
                 e.preventDefault();
+                setIsConfirmed(false); // 確定待ち状態をリセット
                 if (data?.onAddChild) await data.onAddChild();
                 return;
             }
             if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
                 e.preventDefault();
+                setIsConfirmed(false); // 確定待ち状態をリセット
                 if (data?.onAddSibling) await data.onAddSibling();
                 return;
             }
@@ -653,7 +726,8 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
                 return;
             }
             if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-                // Selection Mode -> Edit Mode: allow IME to start from first key
+                // Selection Mode / Confirmed Mode -> Edit Mode: allow IME to start from first key
+                setIsConfirmed(false); // 確定待ち状態をリセット
                 setIsEditing(true);
                 setShowCaret(true);
                 if (inputRef.current) {
@@ -664,7 +738,7 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
         }
 
         if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
-            // Edit Mode + Enter = Confirm only (Selection Mode)
+            // Edit Mode + Enter = Save text and enter "Confirmed" state (3-stage model)
             e.preventDefault();
             e.stopPropagation();
 
@@ -673,6 +747,7 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
             await saveValue();
             setIsEditing(false);
             setShowCaret(false);
+            setIsConfirmed(true); // 確定待ち状態へ遷移
 
             setTimeout(() => { isSavingViaKeyboardRef.current = false; }, 0);
         } else if (e.key === 'Tab') {
@@ -696,6 +771,7 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
             e.preventDefault();
             isSavingViaKeyboardRef.current = true;
             setEditValue(data?.label ?? '');
+            setIsConfirmed(false); // Escapeはキャンセルなので確定待ち状態にしない
             exitEditMode();
             setShowCaret(false);
             setTimeout(() => {
@@ -711,16 +787,20 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
 
         if (e.key === 'Tab') {
             e.preventDefault();
+            setIsConfirmed(false); // 確定待ち状態をリセット
             if (data?.onAddChild) await data.onAddChild();
         } else if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
             e.preventDefault();
+            setIsConfirmed(false); // 確定待ち状態をリセット
             if (data?.onAddSibling) await data.onAddSibling();
         } else if (e.key === 'Delete' || e.key === 'Backspace') {
             e.preventDefault();
             if (data?.onDelete) await data.onDelete();
         } else if (e.key === 'F2') {
             e.preventDefault();
+            setIsConfirmed(false); // 確定待ち状態をリセット
             setIsEditing(true);
+            setShowCaret(true);
             setEditValue(data?.label ?? '');
         } else if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
             // Arrow key navigation (tree-based, not visual)
@@ -741,6 +821,7 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
 
     const handleDoubleClick = useCallback((e: React.MouseEvent) => {
         e.stopPropagation();
+        setIsConfirmed(false); // 確定待ち状態をリセット
         setIsEditing(true);
         setShowCaret(true);
         setEditValue(data?.label ?? '');
@@ -774,9 +855,11 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
         // Do not stop propagation: ReactFlow needs the event to manage selection.
         if (!isEditing) {
             setShowCaret(false);
-            inputRef.current?.focus();
+        inputRef.current?.focus();
         }
     }, [isEditing]);
+
+    const settings = data?.displaySettings || { showStatus: true, showPriority: true, showScheduledAt: true, showEstimatedTime: true, showProgress: true, showCollapseButton: true };
 
     return (
         <div
@@ -791,7 +874,7 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
             onDoubleClick={handleDoubleClick}
             onMouseDown={handleWrapperMouseDown}
         >
-            {data?.onToggleCollapse && data?.hasChildren && (
+            {settings.showCollapseButton && data?.onToggleCollapse && data?.hasChildren && (
                 <button
                     type="button"
                     className="nodrag nopan w-3 h-3 text-[10px] leading-none text-muted-foreground hover:text-foreground shrink-0"
@@ -800,17 +883,19 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
                         data.onToggleCollapse?.();
                     }}
                     aria-label={data?.collapsed ? 'Expand' : 'Collapse'}
-                >
+        >
                     {data?.collapsed ? '>' : 'v'}
                 </button>
             )}
             <Handle type="target" position={Position.Left} className="!bg-muted-foreground/50 !w-1 !h-1" />
+            {settings.showStatus && (
             <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", data?.status === 'done' ? "bg-primary" : "bg-muted-foreground/30")} />
+            )}
 
             <textarea
                 ref={inputRef as any}
                 rows={1}
-                value={editValue}
+                    value={editValue}
                 onChange={(e) => {
                     if (!isEditing) {
                         setIsEditing(true);
@@ -820,7 +905,7 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
                     e.target.style.height = 'auto';
                     e.target.style.height = `${e.target.scrollHeight}px`;
                 }}
-                onBlur={handleInputBlur}
+                    onBlur={handleInputBlur}
                 onKeyDown={handleInputKeyDown as any}
                 onCompositionStart={() => {
                     if (!isEditing) {
@@ -828,7 +913,7 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
                         setShowCaret(true);
                     }
                 }}
-                className={cn(
+                    className={cn(
                     "nodrag nopan flex-1 bg-transparent border-none text-xs focus:outline-none focus:ring-0 px-0.5 min-w-0 resize-none overflow-hidden whitespace-pre-wrap break-words",
                     !showCaret && "caret-transparent pointer-events-none select-none",
                     data?.status === 'done' && "line-through text-muted-foreground"
@@ -837,83 +922,160 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
 
             {/* Priority & DateTime Info Group */}
             <div className="nodrag nopan flex items-center gap-1 shrink-0 ml-1">
-                {/* Priority Group */}
-                {data?.priority != null ? (
+                {/* Estimated Time */}
+                {settings.showEstimatedTime && (
                     <>
-                        {/* Priority Badge (clickable) */}
-                        <PriorityPopover
-                            value={data.priority as Priority}
-                            onChange={(priority) => data?.onUpdatePriority?.(priority)}
-                            trigger={
-                                <span className="cursor-pointer">
-                                    <PriorityBadge value={data.priority as Priority} />
-                                </span>
-                            }
-                        />
-                        
-                        {/* Clear Button */}
-                        <button
-                            className="p-0.5 rounded text-zinc-500 hover:text-red-400 transition-colors"
-                            onClick={(e) => {
-                                e.stopPropagation()
-                                data?.onUpdatePriority?.(undefined as any)
-                            }}
-                            title="優先度を削除"
-                        >
-                            <X className="w-2.5 h-2.5" />
-                        </button>
-                    </>
-                ) : (
-                    /* Priority not set: Icon only (gray) */
-                    <PriorityPopover
-                        value={3}
-                        onChange={(priority) => data?.onUpdatePriority?.(priority)}
-                        trigger={
-                            <button 
+                        {(data?.estimatedDisplayMinutes ?? 0) > 0 ? (
+                            <>
+                                <EstimatedTimePopover
+                                    valueMinutes={data.estimatedDisplayMinutes}
+                                    onChangeMinutes={(minutes) => data?.onUpdateEstimatedTime?.(minutes)}
+                                    isOverridden={!!data?.estimatedIsOverride}
+                                    autoMinutes={data?.estimatedAutoMinutes}
+                                    onResetAuto={data?.hasChildren ? () => data?.onUpdateEstimatedTime?.(0) : undefined}
+                                    trigger={
+                                        <span
+                                            className="cursor-pointer"
+                                            onClick={(e) => e.stopPropagation()}
+                                        >
+                                            <EstimatedTimeBadge
+                                                minutes={data.estimatedDisplayMinutes}
+                                                title={
+                                                    data?.hasChildren
+                                                        ? (data?.estimatedIsOverride
+                                                            ? `手動設定（自動集計: ${data.estimatedAutoMinutes ? formatEstimatedTime(data.estimatedAutoMinutes) : "0分"}）`
+                                                            : `子孫合計: ${formatEstimatedTime(data.estimatedDisplayMinutes)}`)
+                                                        : `見積もり: ${formatEstimatedTime(data.estimatedDisplayMinutes)}`
+                                                }
+                                            />
+                                        </span>
+                                    }
+                                />
+
+                                {/* Clear (leaf) / Reset (parent override) */}
+                                {(!data?.hasChildren || data?.estimatedIsOverride) && (
+                                    <button
+                                        className="p-0.5 rounded text-zinc-500 hover:text-red-400 transition-colors"
+                                        onClick={(e) => {
+                                            e.stopPropagation()
+                                            data?.onUpdateEstimatedTime?.(0)
+                                        }}
+                                        title={data?.hasChildren ? "自動集計に戻す" : "見積もり時間を削除"}
+                                    >
+                                        <X className="w-2.5 h-2.5" />
+                                    </button>
+                                )}
+                            </>
+                        ) : (
+                            <EstimatedTimePopover
+                                valueMinutes={0}
+                                onChangeMinutes={(minutes) => data?.onUpdateEstimatedTime?.(minutes)}
+                                isOverridden={false}
+                                autoMinutes={data?.estimatedAutoMinutes}
+                                trigger={
+                            <button
                                 className="p-0.5 rounded text-zinc-500 hover:text-zinc-400 transition-colors text-xs"
-                                title="優先度を設定"
+                                title={data?.hasChildren ? "見積もり（親タスク上書き）" : "見積もり時間を設定"}
+                                onClick={(e) => e.stopPropagation()}
                             >
-                                🎯
+                                <Clock className="w-3.5 h-3.5" />
                             </button>
-                        }
-                    />
+                                }
+                            />
+                        )}
+                    </>
                 )}
-                
-                {/* DateTime Picker */}
-                <DateTimePicker
-                    date={data?.scheduled_at ? new Date(data.scheduled_at) : undefined}
-                    setDate={(date) => data?.onUpdateDate?.(date ? date.toISOString() : null)}
-                    trigger={
-                        data?.scheduled_at ? (
-                            <div className="flex items-center gap-1">
-                                {/* Date Text (clickable) */}
-                                <span className="text-[10px] text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer">
-                                    {new Date(data.scheduled_at).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                                </span>
+
+                {/* Priority Group */}
+                {settings.showPriority && (
+                    <>
+                        {data?.priority != null ? (
+                            <>
+                                {/* Priority Badge (clickable) */}
+                                <PriorityPopover
+                                    value={data.priority as Priority}
+                                    onChange={(priority) => data?.onUpdatePriority?.(priority)}
+                                    trigger={
+                                        <span className="cursor-pointer">
+                                            <PriorityBadge value={data.priority as Priority} />
+                </span>
+                                    }
+                                />
                                 
                                 {/* Clear Button */}
                                 <button
                                     className="p-0.5 rounded text-zinc-500 hover:text-red-400 transition-colors"
                                     onClick={(e) => {
                                         e.stopPropagation()
-                                        data?.onUpdateDate?.(null)
+                                        data?.onUpdatePriority?.(undefined as any)
                                     }}
-                                    title="日時設定を削除"
+                                    title="優先度を削除"
                                 >
                                     <X className="w-2.5 h-2.5" />
                                 </button>
-                            </div>
+                            </>
                         ) : (
-                            /* Date not set: Calendar icon only */
-                            <button className="p-0.5 rounded text-zinc-500 hover:text-zinc-400 transition-colors"
-                                title="日時設定"
-                            >
-                                <CalendarIcon className="w-3 h-3" />
-                            </button>
-                        )
-                    }
-                />
+                            /* Priority not set: Icon only (gray) */
+                        <PriorityPopover
+                            value={3}
+                            onChange={(priority) => data?.onUpdatePriority?.(priority)}
+                            trigger={
+                                <button 
+                                    className="p-0.5 rounded text-zinc-500 hover:text-zinc-400 transition-colors text-xs"
+                                    title="優先度を設定"
+                                >
+                                    <Target className="w-3.5 h-3.5" />
+                                </button>
+                            }
+                        />
+                        )}
+                    </>
+                )}
+                
+                {/* DateTime Picker */}
+                {settings.showScheduledAt && (
+                    <DateTimePicker
+                        date={data?.scheduled_at ? new Date(data.scheduled_at) : undefined}
+                        setDate={(date) => data?.onUpdateDate?.(date ? date.toISOString() : null)}
+                        trigger={
+                            data?.scheduled_at ? (
+                                <div className="flex items-center gap-1">
+                                    {/* Date Text (clickable) */}
+                                    <span className="text-[10px] text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer">
+                                        {new Date(data.scheduled_at).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                    
+                                    {/* Clear Button */}
+                                    <button
+                                        className="p-0.5 rounded text-zinc-500 hover:text-red-400 transition-colors"
+                                        onClick={(e) => {
+                                            e.stopPropagation()
+                                            data?.onUpdateDate?.(null)
+                                        }}
+                                        title="日時設定を削除"
+                                    >
+                                        <X className="w-2.5 h-2.5" />
+                                    </button>
+                                </div>
+                            ) : (
+                                /* Date not set: Calendar icon only */
+                                <button className="p-0.5 rounded text-zinc-500 hover:text-zinc-400 transition-colors"
+                                    title="日時設定"
+                                >
+                                    <CalendarIcon className="w-3 h-3" />
+                                </button>
+                            )
+                        }
+                    />
+                )}
             </div>
+
+            {/* Confirmed state indicator */}
+            {isConfirmed && (
+                <div className="nodrag nopan shrink-0 ml-1" title="確定済み - Enterで新規タスク作成">
+                    <Check className="w-3 h-3 text-green-500" />
+                </div>
+            )}
 
             <Handle type="source" position={Position.Right} className="!bg-muted-foreground/50 !w-1 !h-1" />
         </div>
@@ -943,7 +1105,16 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onUpdateGr
     const reactFlow = useReactFlow();
     const projectId = project?.id ?? '';
     const USER_ACTION_WINDOW_MS = 800;
-    const groupsJson = JSON.stringify(groups?.map(g => ({ id: g?.id, title: g?.title })) ?? []);
+    
+    // MindMap Display Settings
+    const [displaySettings, setDisplaySettings] = useState<MindMapDisplaySettings>(() => loadSettings());
+    const groupsJson = JSON.stringify(groups?.map(g => ({
+        id: g?.id,
+        title: g?.title,
+        priority: (g as any)?.priority ?? null,
+        scheduled_at: (g as any)?.scheduled_at ?? null,
+        estimated_time: (g as any)?.estimated_time ?? null,
+    })) ?? []);
     const tasksJson = JSON.stringify(tasks?.map(t => ({
         id: t?.id,
         title: t?.title,
@@ -953,7 +1124,8 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onUpdateGr
         order_index: t?.order_index,
         created_at: t?.created_at,
         scheduled_at: t?.scheduled_at,
-        priority: (t as any)?.priority // Include priority (no default value)
+        priority: (t as any)?.priority, // Include priority (no default value)
+        estimated_time: t?.estimated_time ?? 0,
     })) ?? []);
 
     // STATE
@@ -1476,6 +1648,12 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onUpdateGr
         }
     }, [onUpdateTask]);
 
+    const updateTaskEstimatedTime = useCallback(async (taskId: string, minutes: number) => {
+        if (onUpdateTask) {
+            await onUpdateTask(taskId, { estimated_time: minutes });
+        }
+    }, [onUpdateTask]);
+
     // Check if node should trigger edit
     const shouldTriggerEdit = useCallback((taskId: string) => pendingEditNodeId === taskId, [pendingEditNodeId]);
 
@@ -1487,11 +1665,19 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onUpdateGr
         if (!projectId) return { nodes: resultNodes, edges: resultEdges };
 
         try {
-            const parsedGroups = JSON.parse(groupsJson) as { id: string; title: string }[];
+            const parsedGroups = JSON.parse(groupsJson) as {
+                id: string;
+                title: string;
+                priority: number | null;
+                scheduled_at: string | null;
+                estimated_time: number | null;
+            }[];
             const parsedTasks = JSON.parse(tasksJson) as {
                 id: string; title: string; status: string; group_id: string;
                 parent_task_id: string | null; order_index: number; created_at: string;
                 scheduled_at: string | null; // Typed
+                priority: number | null;
+                estimated_time: number;
             }[];
 
             resultNodes.push({
@@ -1533,6 +1719,29 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onUpdateGr
                 childTasksByParent[key].sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0));
             }
 
+            const taskById: Record<string, typeof safeTasks[number]> = {};
+            for (const t of safeTasks) {
+                taskById[t.id] = t;
+            }
+
+            const getChildrenLocal = (taskId: string) => childTasksByParent[taskId] ?? [];
+
+            const getTaskEffectiveMinutes = (taskId: string): number => {
+                const self = taskById[taskId];
+                if (!self) return 0;
+                const children = getChildrenLocal(taskId);
+                if (children.length === 0) return self.estimated_time ?? 0;
+                if ((self.estimated_time ?? 0) > 0) return self.estimated_time;
+                return children.reduce((acc, c) => acc + getTaskEffectiveMinutes(c.id), 0);
+            };
+
+            const getTaskAutoMinutes = (taskId: string): number => {
+                const children = getChildrenLocal(taskId);
+                if (children.length === 0) return taskById[taskId]?.estimated_time ?? 0;
+                // ignore self override: sum children's effective minutes
+                return children.reduce((acc, c) => acc + getTaskEffectiveMinutes(c.id), 0);
+            };
+
             // Root tasks (no parent)
             const rootTasks = safeTasks.filter(t => !t.parent_task_id).sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0));
 
@@ -1556,6 +1765,12 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onUpdateGr
                 if (depth >= MAX_DEPTH) return;
 
                 const triggerEdit = shouldTriggerEdit(task.id);
+                const taskHasChildren = (childTasksByParent[task.id]?.length ?? 0) > 0;
+                const taskIsEstimatedOverride = taskHasChildren && ((task.estimated_time ?? 0) > 0);
+                const taskAutoEstimatedMinutes = taskHasChildren ? getTaskAutoMinutes(task.id) : 0;
+                const taskDisplayEstimatedMinutes = taskHasChildren
+                    ? (taskIsEstimatedOverride ? (task.estimated_time ?? 0) : taskAutoEstimatedMinutes)
+                    : (task.estimated_time ?? 0);
                 const xPos = BASE_X + (depth * X_STEP);
 
                 resultNodes.push({
@@ -1565,21 +1780,26 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onUpdateGr
                         label: task.title ?? 'Task',
                         status: task.status ?? 'todo',
                         scheduled_at: task.scheduled_at,
-                        priority: (task as any).priority,
+                        priority: task.priority,
+                        estimatedDisplayMinutes: taskDisplayEstimatedMinutes,
+                        estimatedAutoMinutes: taskAutoEstimatedMinutes,
+                        estimatedIsOverride: taskIsEstimatedOverride,
                         isSelected: selectedNodeIds.has(task.id),
                         triggerEdit,
                         initialValue: '',
                         onSave: (t: string) => saveTaskTitle(task.id, t),
                         onUpdateDate: (d: string | null) => updateTaskScheduledAt(task.id, d),
                         onUpdatePriority: (p: number) => updateTaskPriority(task.id, p),
+                        onUpdateEstimatedTime: (m: number) => updateTaskEstimatedTime(task.id, m),
                         onAddChild: () => addChildTask(task.id),
                         onAddSibling: () => addSiblingTask(task.id),
                         onDelete: () => deleteTask(task.id),
                         onNavigate: (direction: 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight') => handleNavigate(task.id, direction),
-                        hasChildren: hasChildren(task.id),
+                        hasChildren: taskHasChildren,
                         collapsed: collapsedTaskIds.has(task.id),
                         onToggleCollapse: () => toggleTaskCollapse(task.id),
                         isDropTarget: dropTargetNodeId === task.id,
+                        displaySettings: displaySettings,
                     },
                     position: { x: xPos, y: yOffsetRef.current },
                     draggable: true,
@@ -1595,9 +1815,9 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onUpdateGr
 
                 // Render children recursively (skip if collapsed)
                 if (!collapsedTaskIds.has(task.id)) {
-                    const children = childTasksByParent[task.id] ?? [];
-                    for (const child of children) {
-                        renderTasksRecursively(child, task.id, depth + 1, yOffsetRef);
+                const children = childTasksByParent[task.id] ?? [];
+                for (const child of children) {
+                    renderTasksRecursively(child, task.id, depth + 1, yOffsetRef);
                     }
                 }
             };
@@ -1609,14 +1829,23 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onUpdateGr
 
                 // Get all tasks in this group (for auto-complete logic)
                 const groupTasks = safeTasks.filter(t => t.group_id === group.id);
+                const groupRootTasks = rootTasksByGroup[group.id] ?? [];
+                const groupAutoEstimatedMinutes = groupRootTasks.reduce((acc, t) => acc + getTaskEffectiveMinutes(t.id), 0);
+                const groupIsEstimatedOverride = group.estimated_time != null;
+                const groupDisplayEstimatedMinutes = groupIsEstimatedOverride
+                    ? (group.estimated_time ?? 0)
+                    : groupAutoEstimatedMinutes;
 
                 resultNodes.push({
                     id: group.id,
                     type: 'groupNode',
                     data: {
                         label: group.title ?? 'Group',
-                        priority: (group as any).priority,
-                        scheduled_at: (group as any).scheduled_at,
+                        priority: group.priority,
+                        scheduled_at: group.scheduled_at,
+                        estimatedDisplayMinutes: groupDisplayEstimatedMinutes,
+                        estimatedAutoMinutes: groupAutoEstimatedMinutes,
+                        estimatedIsOverride: groupIsEstimatedOverride,
                         tasks: groupTasks,
                         isSelected: selectedNodeIds.has(group.id),
                         onSave: (newTitle: string) => onUpdateGroupTitle?.(group.id, newTitle),
@@ -1627,6 +1856,7 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onUpdateGr
                         collapsed: collapsedGroupIds.has(group.id),
                         onToggleCollapse: () => toggleGroupCollapse(group.id),
                         isDropTarget: dropTargetNodeId === group.id,
+                        displaySettings: displaySettings,
                     },
                     position: { x: 300, y: groupY },
                     draggable: false,
@@ -1638,7 +1868,6 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onUpdateGr
                     return;
                 }
 
-                const groupRootTasks = rootTasksByGroup[group.id] ?? [];
                 const yOffsetRef = { current: groupY - 20 };
 
                 for (const task of groupRootTasks) {
@@ -1670,6 +1899,9 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onUpdateGr
         project?.title,
         shouldTriggerEdit,
         saveTaskTitle,
+        updateTaskScheduledAt,
+        updateTaskPriority,
+        updateTaskEstimatedTime,
         addChildTask,
         addSiblingTask,
         deleteTask,
@@ -1684,6 +1916,7 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onUpdateGr
         handleNavigate,
         dropTargetNodeId,
         dragPositions,
+        displaySettings,
     ]);
 
     const handleNodeClick: NodeMouseHandler = useCallback((_, node) => {
@@ -1856,7 +2089,7 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onUpdateGr
             // Create new group when Enter is pressed on a group node
             event.preventDefault();
             await createGroupAndFocus("New Group");
-        }
+            }
     }, [selectedNodeId, selectedNodeIds, tasks, groups, hasChildren, onDeleteTask, onCreateTask, createGroupAndFocus, markUserAction]);
 
     return (
@@ -1866,6 +2099,14 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onUpdateGr
             onKeyDown={handleContainerKeyDown}
             onMouseDown={markUserAction}
         >
+            {/* MindMap Display Settings Button (Top Right) */}
+            <div className="absolute top-3 right-3 z-10">
+                <MindMapDisplaySettingsPopover
+                    value={displaySettings}
+                    onChange={setDisplaySettings}
+                />
+            </div>
+
             <ReactFlow
                 nodes={nodes}
                 edges={edges}

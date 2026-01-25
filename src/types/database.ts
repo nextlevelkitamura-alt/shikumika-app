@@ -80,6 +80,9 @@ export interface Database {
                     project_id: string
                     title: string
                     order_index: number
+                    priority: number | null
+                    scheduled_at: string | null
+                    estimated_time: number | null
                     created_at: string
                 }
                 Insert: {
@@ -88,6 +91,9 @@ export interface Database {
                     project_id: string
                     title: string
                     order_index?: number
+                    priority?: number | null
+                    scheduled_at?: string | null
+                    estimated_time?: number | null
                     created_at?: string
                 }
                 Update: {
@@ -96,6 +102,9 @@ export interface Database {
                     project_id?: string
                     title?: string
                     order_index?: number
+                    priority?: number | null
+                    scheduled_at?: string | null
+                    estimated_time?: number | null
                     created_at?: string
                 }
             }
@@ -107,7 +116,7 @@ export interface Database {
                     parent_task_id: string | null
                     title: string
                     status: string
-                    priority: number
+                    priority: number | null
                     order_index: number
                     scheduled_at: string | null
                     estimated_time: number
@@ -126,7 +135,7 @@ export interface Database {
                     parent_task_id?: string | null
                     title: string
                     status?: string
-                    priority?: number
+                    priority?: number | null
                     order_index?: number
                     scheduled_at?: string | null
                     estimated_time?: number
@@ -145,7 +154,7 @@ export interface Database {
                     parent_task_id?: string | null
                     title?: string
                     status?: string
-                    priority?: number
+                    priority?: number | null
                     order_index?: number
                     scheduled_at?: string | null
                     estimated_time?: number

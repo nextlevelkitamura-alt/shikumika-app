@@ -34,14 +34,27 @@ All future changes MUST conform to these rules to ensure a "Professional Native 
   - Clicking it toggles the visibility of all descendant nodes.
   - Default state: Expanded.
 
-## 4. Text Input Rules (Excel-Like Overwrite)
+## 4. Text Input Rules (Excel-Like Overwrite) - 3-Stage Model
+* **State Transitions**:
+  ```
+  Selection → Editing → Confirmed → New Node
+  ```
+  - **Selection Mode**: Node is focused but not editable. Blue outline only.
+  - **Editing Mode**: Text is editable. Blue outline + blinking caret.
+  - **Confirmed Mode**: Text saved, waiting for next action. Blue outline + green check icon.
+
 * **Typing Trigger**:
-  - In Selection Mode, typing any character key MUST:
+  - In Selection/Confirmed Mode, typing any character key MUST:
     1. Switch to Edit Mode immediately.
     2. **Overwrite** the entire existing text with the typed character.
     3. Start IME composition correctly (Fixing "h-a" issue).
 * **Edit Trigger**:
   - `Double Click` or `F2` enters Edit Mode with **All Text Selected**.
+
+* **Enter Key Behavior (3-Step)**:
+  - **Editing Mode + Enter**: Save text and enter Confirmed Mode.
+  - **Confirmed Mode + Enter**: Create new sibling node below.
+  - **Selection Mode + Enter**: Create new sibling node below.
 
 ## 5. Focus Management (The "Flow")
 * **Creation Flow**:
@@ -58,12 +71,19 @@ All future changes MUST conform to these rules to ensure a "Professional Native 
 * **Performance**:
   - Use `useOptimistic` or local state for Drag&Drop and Folding to ensure 60fps animations.
 
-## 7. Keyboard Shortcuts Summary
-| Trigger | Action | UI Response |
-| :--- | :--- | :--- |
-| **Selection** | `Char Key` | Overwrite & Edit | **Instant** |
+## 7. Keyboard Shortcuts Summary (3-Stage Model)
+| Mode | Key | Action | UI Response |
+| :--- | :--- | :--- | :--- |
+| **Selection** | `Char Key` | → Editing (overwrite) | **Instant** |
 | | `Enter` | Create Sibling | **Instant** |
 | | `Tab` | Create Child | **Instant** |
-| | `Drag Canvas` | Marquee Select | **Fluid** |
 | | `Delete` | Bulk Delete | **Instant** |
+| **Editing** | `Char Key` | Type text | **Instant** |
+| | `Enter` | → Confirmed | **Instant** |
+| | `Tab` | Save + Create Child | **Instant** |
+| | `Escape` | Cancel → Selection | **Instant** |
+| **Confirmed** | `Enter` | Create Sibling | **Instant** |
+| | `Tab` | Create Child | **Instant** |
+| | `Char Key` | → Editing (overwrite) | **Instant** |
+| **Drag Canvas** | | Marquee Select | **Fluid** |
 | **Drag Node** | Drop on Node | Reparent (Move) | **Instant Layout** |
