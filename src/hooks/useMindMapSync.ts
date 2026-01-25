@@ -127,7 +127,7 @@ export function useMindMapSync({
             parent_task_id: parentTaskId,
             title,
             status: 'todo',
-            priority: 3,
+            priority: null,
             order_index: maxOrder,
             scheduled_at: null,
             estimated_time: 0,
@@ -154,7 +154,7 @@ export function useMindMapSync({
                     parent_task_id: parentTaskId,
                     title,
                     status: 'todo',
-                    priority: 3,
+                    // priority: null で作成（明示的に設定されるまで未設定）
                     order_index: maxOrder,
                     actual_time_minutes: 0,
                     estimated_time: 0
