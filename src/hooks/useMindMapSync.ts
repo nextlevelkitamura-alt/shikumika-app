@@ -186,6 +186,26 @@ export function useMindMapSync({
         try {
             await supabase.from('tasks').update(updates).eq('id', taskId)
 
+            // GOOGLE CALENDAR SYNC: If scheduled_at or estimated_time is updated
+            if (updates.scheduled_at !== undefined || updates.estimated_time !== undefined) {
+                const task = tasks.find(t => t.id === taskId);
+                const updatedTask = { ...task, ...updates };
+
+                // Only sync if both scheduled_at and estimated_time are present
+                if (updatedTask.scheduled_at && updatedTask.estimated_time) {
+                    try {
+                        await fetch('/api/calendar/sync-task', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ taskId })
+                        });
+                    } catch (error) {
+                        console.error('[Calendar Sync] Failed to sync task:', error);
+                        // Don't block the task update if calendar sync fails
+                    }
+                }
+            }
+
             // AUTO-COMPLETE PARENT: If status changed to 'done', check if all siblings are also done
             if (updates.status === 'done') {
                 const task = tasks.find(t => t.id === taskId);
