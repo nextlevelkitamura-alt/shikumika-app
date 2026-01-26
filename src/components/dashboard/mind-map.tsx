@@ -1131,6 +1131,7 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onUpdateGr
         order_index: t?.order_index,
         created_at: t?.created_at,
         scheduled_at: t?.scheduled_at,
+        google_event_id: t?.google_event_id,
         priority: (t as any)?.priority, // Include priority (no default value)
         estimated_time: t?.estimated_time ?? 0,
     })) ?? []);
@@ -1683,6 +1684,7 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onUpdateGr
                 id: string; title: string; status: string; group_id: string;
                 parent_task_id: string | null; order_index: number; created_at: string;
                 scheduled_at: string | null; // Typed
+                google_event_id: string | null;
                 priority: number | null;
                 estimated_time: number;
             }[];
