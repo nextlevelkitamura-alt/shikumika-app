@@ -713,6 +713,12 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
                 if (data?.onAddSibling) await data.onAddSibling();
                 return;
             }
+            if (e.key === 'Escape') {
+                // Confirmed Mode -> Selection Mode: exit confirmed state
+                e.preventDefault();
+                setIsConfirmed(false);
+                return;
+            }
             if (e.key === 'Delete' || e.key === 'Backspace') {
                 e.preventDefault();
                 if (data?.onDelete) await data.onDelete();

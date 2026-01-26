@@ -56,6 +56,11 @@ All future changes MUST conform to these rules to ensure a "Professional Native 
   - **Confirmed Mode + Enter**: Create new sibling node below.
   - **Selection Mode + Enter**: Create new sibling node below.
 
+* **Escape Key Behavior**:
+  - **Editing Mode + Escape**: Cancel changes and return to Selection Mode.
+  - **Confirmed Mode + Escape**: Exit confirmed state and return to Selection Mode.
+  - **Selection Mode + Escape**: No action (already in base state).
+
 ## 5. Focus Management (The "Flow")
 * **Creation Flow**:
   - `Enter` (Sibling) / `Tab` (Child) -> **Instant Focus** on new node (Edit Mode).
@@ -87,12 +92,15 @@ All future changes MUST conform to these rules to ensure a "Professional Native 
 | | `Enter` | Create Sibling | **Instant** |
 | | `Tab` | Create Child | **Instant** |
 | | `Delete` | Bulk Delete | **Instant** |
+| | `Arrow Keys` | Navigate | **Instant** |
 | **Editing** | `Char Key` | Type text | **Instant** |
-| | `Enter` | → Confirmed | **Instant** |
+| | `Enter` | Save → Confirmed | **Instant** |
 | | `Tab` | Save + Create Child | **Instant** |
 | | `Escape` | Cancel → Selection | **Instant** |
 | **Confirmed** | `Enter` | Create Sibling | **Instant** |
 | | `Tab` | Create Child | **Instant** |
 | | `Char Key` | → Editing (overwrite) | **Instant** |
+| | `Escape` | → Selection | **Instant** |
+| | `Arrow Keys` | Navigate | **Instant** |
 | **Drag Canvas** | | Marquee Select | **Fluid** |
 | **Drag Node** | Drop on Node | Reparent (Move) | **Instant Layout** |
