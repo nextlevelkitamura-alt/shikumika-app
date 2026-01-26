@@ -7,6 +7,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
+import { CalendarSettings } from "./calendar-settings"
 
 export function RightSidebar() {
     const [isAiPanelOpen, setIsAiPanelOpen] = useState(true)
@@ -15,11 +16,14 @@ export function RightSidebar() {
         <div className="h-full flex flex-col bg-card border-l relative">
             {/* 1. Google Calendar Section */}
             <div className={`flex flex-col border-b transition-all duration-300 ${isAiPanelOpen ? 'h-[60%]' : 'h-full'}`}>
-                <div className="h-14 flex items-center justify-between px-4 border-b bg-muted/5">
-                    <div className="flex items-center gap-2">
-                        <img src="https://www.gstatic.com/calendar/images/dynamiclogo_2020q4/daily_30.ico" alt="Calendar" className="w-5 h-5" />
-                        <span className="font-semibold text-sm">Googleカレンダー (同期済み)</span>
+                <div className="flex flex-col border-b bg-muted/5">
+                    <div className="h-14 flex items-center justify-between px-4">
+                        <div className="flex items-center gap-2">
+                            <img src="https://www.gstatic.com/calendar/images/dynamiclogo_2020q4/daily_30.ico" alt="Calendar" className="w-5 h-5" />
+                            <span className="font-semibold text-sm">Googleカレンダー</span>
+                        </div>
                     </div>
+                    <CalendarSettings />
                 </div>
                 <div className="flex-1 p-2 bg-muted/5 relative overflow-hidden">
                     {/* Calendar Grid Mockup */}

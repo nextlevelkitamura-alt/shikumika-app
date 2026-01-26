@@ -1070,6 +1070,13 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
                 )}
             </div>
 
+            {/* Calendar sync indicator */}
+            {data?.google_event_id && (
+                <div className="nodrag nopan shrink-0 ml-1" title="Googleカレンダーと同期済み">
+                    <CalendarIcon className="w-3 h-3 text-blue-500" />
+                </div>
+            )}
+
             {/* Confirmed state indicator */}
             {isConfirmed && (
                 <div className="nodrag nopan shrink-0 ml-1" title="確定済み - Enterで新規タスク作成">
@@ -1780,6 +1787,7 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onUpdateGr
                         label: task.title ?? 'Task',
                         status: task.status ?? 'todo',
                         scheduled_at: task.scheduled_at,
+                        google_event_id: task.google_event_id,
                         priority: task.priority,
                         estimatedDisplayMinutes: taskDisplayEstimatedMinutes,
                         estimatedAutoMinutes: taskAutoEstimatedMinutes,
