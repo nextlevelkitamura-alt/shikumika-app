@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { google } from 'googleapis';
 import { createClient } from '@/utils/supabase/server';
 
@@ -6,7 +6,7 @@ import { createClient } from '@/utils/supabase/server';
  * Google OAuth認証URLにリダイレクト
  * GET /api/calendar/connect
  */
-export async function GET(request: NextRequest) {
+export async function GET() {
   const supabase = await createClient();
 
   // ログインユーザーを確認
