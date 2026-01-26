@@ -94,6 +94,7 @@ export async function syncTaskToCalendar(
     scheduled_at: string | null;
     estimated_time: number;
     google_event_id?: string | null;
+    target_calendar_id?: string | null;
   }
 ) {
   const supabase = await createClient();
@@ -105,7 +106,8 @@ export async function syncTaskToCalendar(
     .eq('user_id', userId)
     .single();
 
-  const calendarId = settings?.default_calendar_id || 'primary';
+  // target_calendar_id が設定されていればそれを使用、なければデフォルト
+  const calendarId = task.target_calendar_id || settings?.default_calendar_id || 'primary';
 
   try {
     const event = taskToCalendarEvent(task);

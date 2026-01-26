@@ -8,9 +8,11 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { CalendarSettings } from "./calendar-settings"
+import { CalendarSelector } from "@/components/calendar/calendar-selector"
 
 export function RightSidebar() {
     const [isAiPanelOpen, setIsAiPanelOpen] = useState(true)
+    const [selectedCalendarIds, setSelectedCalendarIds] = useState<string[]>([])
 
     return (
         <div className="h-full flex flex-col bg-card border-l relative">
@@ -24,6 +26,11 @@ export function RightSidebar() {
                         </div>
                     </div>
                     <CalendarSettings />
+                    <div className="border-t">
+                        <CalendarSelector
+                            onSelectionChange={setSelectedCalendarIds}
+                        />
+                    </div>
                 </div>
                 <div className="flex-1 p-2 bg-muted/5 relative overflow-hidden">
                     {/* Calendar Grid Mockup */}
