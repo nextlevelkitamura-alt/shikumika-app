@@ -26,7 +26,9 @@ export async function GET(request: NextRequest) {
   // 認証URLを生成
   const authUrl = oauth2Client.generateAuthUrl({
     access_type: 'offline', // refresh_tokenを取得
-    scope: ['https://www.googleapis.com/auth/calendar.events'],
+    scope: [
+      'https://www.googleapis.com/auth/calendar', // カレンダーリスト取得とイベント操作
+    ],
     state: user.id, // ユーザーIDをstateに含める（セキュリティ）
   });
 
