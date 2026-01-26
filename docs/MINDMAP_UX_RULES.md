@@ -71,7 +71,16 @@ All future changes MUST conform to these rules to ensure a "Professional Native 
 * **Performance**:
   - Use `useOptimistic` or local state for Drag&Drop and Folding to ensure 60fps animations.
 
-## 7. Keyboard Shortcuts Summary (3-Stage Model)
+## 7. Selection State Management (Single Focus Enforcement)
+* **Single Selection Rule**:
+  - During keyboard navigation, ONLY ONE node may be selected (blue focus ring) at a time.
+  - Drag-selection (marquee) CAN select multiple nodes for bulk operations.
+  - When keyboard navigation occurs (Arrow keys), ReactFlow's internal selection state is synchronized to enforce single selection.
+* **Focus Synchronization**:
+  - The custom `selectedNodeIds` state is kept in sync with ReactFlow's internal `selected` property on nodes.
+  - This prevents the "multiple blue nodes" bug where old drag-selections persist after keyboard operations.
+
+## 8. Keyboard Shortcuts Summary (3-Stage Model)
 | Mode | Key | Action | UI Response |
 | :--- | :--- | :--- | :--- |
 | **Selection** | `Char Key` | → Editing (overwrite) | **Instant** |

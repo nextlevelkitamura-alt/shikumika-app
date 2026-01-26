@@ -1156,7 +1156,17 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onUpdateGr
         }
         setSelectedNodeIds(ids);
         setSelectedNodeId(primaryId);
-    }, [markUserAction]);
+
+        // CRITICAL: Sync ReactFlow's internal selection state to match our custom selection
+        // This prevents the "multiple blue nodes" bug where ReactFlow's drag-selection state
+        // persists after keyboard navigation
+        reactFlow.setNodes((nodes) =>
+            nodes.map((node) => ({
+                ...node,
+                selected: ids.has(node.id),
+            }))
+        );
+    }, [markUserAction, reactFlow]);
 
     useEffect(() => {
         selectedNodeIdRef.current = selectedNodeId;
