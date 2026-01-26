@@ -2,7 +2,14 @@
 
 import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
-import { RefreshCw, Settings } from "lucide-react"
+import { RefreshCw, Settings, ChevronDown } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+  DropdownMenuCheckboxItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu"
 
 export interface Calendar {
   id: string
@@ -17,9 +24,10 @@ export interface Calendar {
 
 interface CalendarSelectorProps {
   onSelectionChange?: (selectedIds: string[]) => void
+  compact?: boolean
 }
 
-export function CalendarSelector({ onSelectionChange }: CalendarSelectorProps) {
+export function CalendarSelector({ onSelectionChange, compact = false }: CalendarSelectorProps) {
   const [calendars, setCalendars] = useState<Calendar[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -89,13 +97,61 @@ export function CalendarSelector({ onSelectionChange }: CalendarSelectorProps) {
   }
 
   if (calendars.length === 0) {
-    return (
+    return compact ? null : (
       <div className="p-2 text-xs text-muted-foreground text-center">
         カレンダーが見つかりません
       </div>
     )
   }
 
+  const selectedCount = calendars.filter(cal => cal.selected).length
+
+  // Compact mode (dropdown)
+  if (compact) {
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="sm" className="h-7 text-xs gap-1">
+            {selectedCount}個
+            <ChevronDown className="w-3 h-3" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-56">
+          {calendars.map((calendar) => (
+            <DropdownMenuCheckboxItem
+              key={calendar.id}
+              checked={calendar.selected}
+              onCheckedChange={() => toggleCalendar(calendar.id)}
+              className="flex items-center gap-2"
+            >
+              <div
+                className="w-3 h-3 rounded-full shrink-0"
+                style={{ backgroundColor: calendar.color }}
+              />
+              <span className="flex-1 truncate">
+                {calendar.name}
+                {calendar.primary && (
+                  <span className="ml-1 text-[10px] text-muted-foreground">(メイン)</span>
+                )}
+              </span>
+            </DropdownMenuCheckboxItem>
+          ))}
+          <DropdownMenuSeparator />
+          <Button
+            onClick={fetchCalendars}
+            size="sm"
+            variant="ghost"
+            className="w-full h-7 text-xs justify-start"
+          >
+            <RefreshCw className="w-3 h-3 mr-2" />
+            更新
+          </Button>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    )
+  }
+
+  // Full mode (original)
   return (
     <div className="p-2 space-y-2">
       {/* カレンダーリスト */}

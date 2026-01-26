@@ -12,7 +12,7 @@ import { CalendarSelector } from "@/components/calendar/calendar-selector"
 import { CalendarWeekView } from "@/components/calendar/calendar-week-view"
 
 export function RightSidebar() {
-    const [isAiPanelOpen, setIsAiPanelOpen] = useState(true)
+    const [isAiPanelOpen, setIsAiPanelOpen] = useState(false) // デフォルト閉じる
     const [selectedCalendarIds, setSelectedCalendarIds] = useState<string[]>([])
 
     // タスクがカレンダーにドロップされた時の処理
@@ -58,37 +58,38 @@ export function RightSidebar() {
     return (
         <div className="h-full flex flex-col bg-card border-l relative">
             {/* 1. Google Calendar Section */}
-            <div className={`flex flex-col border-b transition-all duration-300 ${isAiPanelOpen ? 'h-[60%]' : 'h-full'}`}>
-                <div className="flex flex-col border-b bg-muted/5">
-                    <div className="h-14 flex items-center justify-between px-4">
-                        <div className="flex items-center gap-2">
-                            <img src="https://www.gstatic.com/calendar/images/dynamiclogo_2020q4/daily_30.ico" alt="Calendar" className="w-5 h-5" />
-                            <span className="font-semibold text-sm">Googleカレンダー</span>
-                        </div>
+            <div className={`flex flex-col border-b transition-all duration-300 ${isAiPanelOpen ? 'h-[70%]' : 'h-full'}`}>
+                {/* Compact Header */}
+                <div className="h-10 px-3 flex items-center justify-between border-b bg-gradient-to-r from-muted/20 to-muted/10 backdrop-blur-sm">
+                    <div className="flex items-center gap-2">
+                        <img src="https://www.gstatic.com/calendar/images/dynamiclogo_2020q4/daily_30.ico" alt="Calendar" className="w-4 h-4" />
+                        <span className="font-semibold text-sm">カレンダー</span>
                     </div>
-                    <CalendarSettings />
-                    <div className="border-t">
+                    <div className="flex items-center gap-1">
+                        <CalendarSettings compact />
                         <CalendarSelector
                             onSelectionChange={setSelectedCalendarIds}
+                            compact
                         />
                     </div>
                 </div>
+
+                {/* Calendar Grid - Expanded */}
                 <div className="flex-1 p-2 bg-muted/5 relative overflow-hidden">
-                    {/* Calendar Grid with Drag & Drop */}
                     <CalendarWeekView onTaskDrop={handleTaskDrop} />
                 </div>
             </div>
 
             {/* 2. AI Feedback (Advisor) Panel */}
-            <div className={`flex flex-col bg-sidebar transition-all duration-300 ${isAiPanelOpen ? 'h-[40%]' : 'h-10'} border-t shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] z-10`}>
+            <div className={`flex flex-col bg-sidebar transition-all duration-300 ${isAiPanelOpen ? 'h-[30%]' : 'h-10'} border-t shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] z-10`}>
                 {/* Header (Toggle) */}
                 <div
-                    className="h-10 flex items-center justify-between px-4 cursor-pointer hover:bg-muted/50 transition-colors"
+                    className="h-10 flex items-center justify-between px-3 cursor-pointer hover:bg-muted/50 transition-colors"
                     onClick={() => setIsAiPanelOpen(!isAiPanelOpen)}
                 >
-                    <div className="flex items-center gap-2 text-sm font-semibold">
-                        <MessageSquare className="w-4 h-4" />
-                        AIフィードバック (Advisor)
+                    <div className="flex items-center gap-2 text-xs font-semibold">
+                        <Sparkles className="w-3.5 h-3.5" />
+                        AI Advisor
                     </div>
                     {isAiPanelOpen ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronUp className="w-4 h-4 text-muted-foreground" />}
                 </div>

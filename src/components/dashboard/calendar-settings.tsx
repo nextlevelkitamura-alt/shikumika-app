@@ -11,7 +11,11 @@ interface CalendarStatus {
   lastSyncedAt: string | null
 }
 
-export function CalendarSettings() {
+interface CalendarSettingsProps {
+  compact?: boolean
+}
+
+export function CalendarSettings({ compact = false }: CalendarSettingsProps) {
   const [status, setStatus] = useState<CalendarStatus>({
     isConnected: false,
     isSyncEnabled: false,
@@ -74,13 +78,42 @@ export function CalendarSettings() {
   }
 
   if (isLoading) {
-    return (
+    return compact ? (
+      <RefreshCw className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
+    ) : (
       <div className="flex items-center justify-center p-2">
         <RefreshCw className="w-4 h-4 animate-spin text-muted-foreground" />
       </div>
     )
   }
 
+  // Compact mode (for header)
+  if (compact) {
+    if (!status.isConnected) {
+      return (
+        <Button
+          onClick={handleConnect}
+          size="sm"
+          variant="ghost"
+          className="h-7 text-xs"
+        >
+          <Calendar className="w-3.5 h-3.5 mr-1" />
+          連携
+        </Button>
+      )
+    }
+
+    return (
+      <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 px-2 py-0.5 bg-green-500/10 rounded text-[10px] text-green-600">
+          <Check className="w-3 h-3" />
+          <span>連携済み</span>
+        </div>
+      </div>
+    )
+  }
+
+  // Full mode (original)
   return (
     <div className="p-2 space-y-2">
       {!status.isConnected ? (

@@ -67,35 +67,44 @@ export function CalendarWeekView({ onTaskDrop }: CalendarWeekViewProps) {
 
   return (
     <div className="w-full h-full grid grid-cols-5 grid-rows-[auto_1fr] bg-background border rounded overflow-hidden">
-      {/* Days Header */}
-      <div className="col-span-5 grid grid-cols-5 border-b py-2 text-center text-xs text-muted-foreground">
+      {/* Days Header - Improved */}
+      <div className="col-span-5 grid grid-cols-5 border-b bg-gradient-to-b from-muted/10 to-transparent">
         {weekDates.map((date, i) => {
           const { day, date: dateNum } = formatDate(date)
           const isToday = new Date().toDateString() === date.toDateString()
           return (
-            <span key={i} className={cn(isToday && "text-primary font-bold")}>
-              {day}<br />
-              <span className={cn(
-                "text-lg font-bold",
+            <div
+              key={i}
+              className={cn(
+                "py-3 text-center transition-colors",
+                isToday && "bg-primary/10"
+              )}
+            >
+              <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                {day}
+              </div>
+              <div className={cn(
+                "text-2xl font-bold mt-1",
                 isToday ? "text-primary" : "text-foreground"
               )}>
                 {dateNum}
-              </span>
-            </span>
+              </div>
+            </div>
           )
         })}
       </div>
 
-      {/* Time Grid */}
-      <div className="col-span-5 relative grid grid-rows-10 divide-y">
+      {/* Time Grid - Improved */}
+      <div className="col-span-5 relative grid grid-rows-10 divide-y divide-border/30">
         {hours.map((hour, hourIndex) => (
-          <div key={hour} className="relative h-full border-l ml-8 group">
-            <span className="absolute -left-8 -top-2 text-[10px] text-muted-foreground w-6 text-right block group-first:hidden">
+          <div key={hour} className="relative h-full">
+            {/* Time Label */}
+            <span className="absolute -left-10 -top-2 text-[10px] text-muted-foreground/70 font-medium w-8 text-right block group-first:hidden">
               {hour > 12 ? hour - 12 : hour} {hour >= 12 ? 'PM' : 'AM'}
             </span>
 
-            {/* ドロップゾーン（各日の各時間） */}
-            <div className="absolute inset-0 grid grid-cols-5">
+            {/* Drop Zones with Enhanced Feedback */}
+            <div className="absolute inset-0 grid grid-cols-5 gap-px">
               {weekDates.map((_, dayIndex) => {
                 const cellId = `${dayIndex}-${hourIndex}`
                 const isHighlighted = dragOverCell === cellId
@@ -104,8 +113,9 @@ export function CalendarWeekView({ onTaskDrop }: CalendarWeekViewProps) {
                   <div
                     key={cellId}
                     className={cn(
-                      "border-r transition-colors",
-                      isHighlighted && "bg-primary/10 border-primary"
+                      "transition-all duration-200 border-r border-border/20",
+                      "hover:bg-primary/5",
+                      isHighlighted && "bg-primary/15 shadow-inner border-primary/50"
                     )}
                     onDragOver={(e) => handleDragOver(e, cellId)}
                     onDragLeave={handleDragLeave}
