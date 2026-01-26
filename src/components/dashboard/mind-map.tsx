@@ -865,6 +865,22 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
         }
     }, [isEditing]);
 
+    // ドラッグ開始時の処理（カレンダーにドロップするため）
+    const handleDragStart = useCallback((e: React.DragEvent) => {
+        if (isEditing) {
+            e.preventDefault()
+            return
+        }
+
+        // タスクIDをドラッグデータに設定
+        const taskId = (data as any)?.taskId || (data as any)?.id
+        if (taskId) {
+            e.dataTransfer.setData('text/plain', taskId)
+            e.dataTransfer.effectAllowed = 'copy'
+            console.log('[TaskNode] Drag started:', taskId)
+        }
+    }, [isEditing, data])
+
     const settings = data?.displaySettings || { showStatus: true, showPriority: true, showScheduledAt: true, showEstimatedTime: true, showProgress: true, showCollapseButton: true };
 
     return (
@@ -876,6 +892,8 @@ const TaskNode = React.memo(({ data, selected }: NodeProps) => {
                 data?.isDropTarget && "ring-2 ring-emerald-400 ring-offset-1 ring-offset-background border-emerald-400"
             )}
             tabIndex={0}
+            draggable={!isEditing}
+            onDragStart={handleDragStart}
             onKeyDown={handleWrapperKeyDown}
             onDoubleClick={handleDoubleClick}
             onMouseDown={handleWrapperMouseDown}
@@ -1802,6 +1820,7 @@ function MindMapContent({ project, groups, tasks, onUpdateGroupTitle, onUpdateGr
                     id: task.id,
                     type: 'taskNode',
                     data: {
+                        taskId: task.id, // カレンダードラッグ&ドロップ用
                         label: task.title ?? 'Task',
                         status: task.status ?? 'todo',
                         scheduled_at: task.scheduled_at,

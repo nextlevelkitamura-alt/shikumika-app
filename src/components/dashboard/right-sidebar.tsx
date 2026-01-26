@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { ChevronDown, ChevronUp, MessageSquare, Send, Sparkles } from "lucide-react"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -9,10 +9,51 @@ import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { CalendarSettings } from "./calendar-settings"
 import { CalendarSelector } from "@/components/calendar/calendar-selector"
+import { CalendarWeekView } from "@/components/calendar/calendar-week-view"
 
 export function RightSidebar() {
     const [isAiPanelOpen, setIsAiPanelOpen] = useState(true)
     const [selectedCalendarIds, setSelectedCalendarIds] = useState<string[]>([])
+
+    // タスクがカレンダーにドロップされた時の処理
+    const handleTaskDrop = useCallback(async (taskId: string, dateTime: Date) => {
+        console.log('[RightSidebar] Task dropped on calendar:', { taskId, dateTime })
+
+        try {
+            // カレンダーに同期
+            const response = await fetch('/api/calendar/sync-task', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    taskId,
+                    scheduledAt: dateTime.toISOString()
+                })
+            })
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}))
+                throw new Error(errorData.error || 'Failed to sync task to calendar')
+            }
+
+            const data = await response.json()
+
+            // 成功フィードバック
+            const timeStr = dateTime.toLocaleString('ja-JP', {
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            })
+            alert(`✅ カレンダーに追加しました\n${timeStr} に予定を追加しました`)
+
+            // ページをリロードして最新のタスク状態を反映
+            window.location.reload()
+
+        } catch (error) {
+            console.error('Failed to sync task:', error)
+            alert(`❌ エラー\nカレンダーへの追加に失敗しました: ${error instanceof Error ? error.message : '不明なエラー'}`)
+        }
+    }, [])
 
     return (
         <div className="h-full flex flex-col bg-card border-l relative">
@@ -33,39 +74,8 @@ export function RightSidebar() {
                     </div>
                 </div>
                 <div className="flex-1 p-2 bg-muted/5 relative overflow-hidden">
-                    {/* Calendar Grid Mockup */}
-                    <div className="w-full h-full grid grid-cols-5 grid-rows-[auto_1fr] bg-background border rounded overflow-hidden">
-                        {/* Days Header */}
-                        <div className="col-span-5 grid grid-cols-5 border-b py-2 text-center text-xs text-muted-foreground">
-                            <span>月<br /><span className="text-lg font-bold text-foreground">25</span></span>
-                            <span>火<br /><span className="text-lg font-bold text-foreground">26</span></span>
-                            <span>水<br /><span className="text-lg font-bold text-foreground">27</span></span>
-                            <span>木<br /><span className="text-lg font-bold text-foreground">28</span></span>
-                            <span>金<br /><span className="text-lg font-bold text-foreground">29</span></span>
-                        </div>
-
-                        {/* Time Grid */}
-                        <div className="col-span-5 relative grid grid-rows-10 divide-y">
-                            {[9, 10, 11, 12, 13, 14, 15, 16, 17, 18].map(hour => (
-                                <div key={hour} className="relative h-full border-l ml-8 group">
-                                    <span className="absolute -left-8 -top-2 text-[10px] text-muted-foreground w-6 text-right block group-first:hidden">
-                                        {hour > 12 ? hour - 12 : hour} {hour >= 12 ? 'PM' : 'AM'}
-                                    </span>
-                                </div>
-                            ))}
-
-                            {/* Events */}
-                            <div className="absolute top-[30%] left-[20%] w-[18%] h-[15%] rounded bg-purple-500/20 border-l-2 border-purple-500 p-1 text-[9px] text-purple-700 font-medium">
-                                火曜MTG
-                            </div>
-                            <div className="absolute top-[45%] left-[20%] w-[18%] h-[20%] rounded bg-blue-500/20 border-l-2 border-blue-500 p-1 text-[9px] text-blue-700 font-medium">
-                                資料作成
-                            </div>
-                            <div className="absolute top-[35%] left-[40%] w-[18%] h-[10%] rounded bg-purple-500/20 border-l-2 border-purple-500 p-1 text-[9px] text-purple-700 font-medium">
-                                火曜午後
-                            </div>
-                        </div>
-                    </div>
+                    {/* Calendar Grid with Drag & Drop */}
+                    <CalendarWeekView onTaskDrop={handleTaskDrop} />
                 </div>
             </div>
 
