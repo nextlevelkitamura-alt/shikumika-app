@@ -17,18 +17,20 @@ export async function POST() {
 
   try {
     // トークンを削除（NULLに設定）
+    // Note: calendarsカラムはマイグレーション後に追加されるため、
+    // 既存のカラムのみ更新する
     const { error: updateError } = await supabase
       .from('user_calendar_settings')
       .update({
         google_access_token: null,
         google_refresh_token: null,
         google_token_expires_at: null,
-        calendars: [],
         updated_at: new Date().toISOString()
       })
       .eq('user_id', user.id);
 
     if (updateError) {
+      console.error('Update error:', updateError);
       throw updateError;
     }
 

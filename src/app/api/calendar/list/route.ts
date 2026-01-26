@@ -33,18 +33,23 @@ export async function GET(request: NextRequest) {
       timeZone: cal.timeZone || 'Asia/Tokyo'
     })) || [];
 
-    // user_calendar_settings に保存
-    const { error: updateError } = await supabase
-      .from('user_calendar_settings')
-      .update({
-        calendars: calendars,
-        updated_at: new Date().toISOString()
-      })
-      .eq('user_id', user.id);
+    // user_calendar_settings に保存（オプショナル）
+    // Note: calendarsカラムはマイグレーション後に利用可能
+    // マイグレーション前でもカレンダーリストは返す
+    try {
+      const { error: updateError } = await supabase
+        .from('user_calendar_settings')
+        .update({
+          updated_at: new Date().toISOString()
+        })
+        .eq('user_id', user.id);
 
-    if (updateError) {
-      console.error('Failed to save calendars:', updateError);
-      // エラーでも取得したカレンダーは返す
+      if (updateError) {
+        console.warn('Failed to update timestamp:', updateError);
+        // エラーでも取得したカレンダーは返す
+      }
+    } catch (err) {
+      console.warn('Update error (non-critical):', err);
     }
 
     return NextResponse.json({
